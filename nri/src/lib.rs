@@ -18,19 +18,14 @@ use nri::{c_transfer, plugin};
 use std::os::raw::{c_char, c_int};
 
 #[no_mangle]
-pub extern "C" fn nri_runtime_service_init(socket_addr: *const c_char,
-                                           callbacks: c_transfer::NriRuntimeCallbacks) -> c_int {
-    if socket_addr.is_null() {
-        return -1;
-    }
-    let r_socket_addr = c_transfer::to_string(socket_addr);
-    println!("isula-rust-extensions::nri_runtime_service with::{}", r_socket_addr);
-    if let Err(e) = plugin::runtime_service_init(&r_socket_addr, callbacks) {
+pub extern "C" fn nri_runtime_service_init(callbacks: c_transfer::NriRuntimeCallbacks) -> c_int {
+    println!("isula-rust-extensions::nri_runtime_service_init");
+    if let Err(e) = plugin::runtime_service_init(callbacks) {
         println!("isula-rust-extensions::nri_runtime_service failed: {}", e);
         return -1;
     }
 
-    println!("isula-rust-extensions::nri_runtime_service success");
+    println!("isula-rust-extensions::nri_runtime_service_init success");
     0
 }
 

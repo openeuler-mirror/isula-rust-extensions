@@ -33,10 +33,12 @@ extern "C" {
 #endif
 
 typedef int (*nri_runtime_register_plugin_callback)(
+  const char *plugin_id,
   const nri_register_plugin_request *request
 );
 
 typedef int (*nri_runtime_update_containers_callback)(
+  const char *plugin_id,
   const nri_update_containers_request *request,
   nri_update_containers_response **response
 );
@@ -46,8 +48,7 @@ typedef struct nri_runtime_callbasks {
   nri_runtime_update_containers_callback update_containers;
 } nri_runtime_callbacks;
 
-int nri_runtime_service_init(const char *socket_addr,
-                             nri_runtime_callbacks callbacks);
+int nri_runtime_service_init(nri_runtime_callbacks callbacks);
 
 void nri_runtime_service_destroy();
 

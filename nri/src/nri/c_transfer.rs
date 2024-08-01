@@ -1420,8 +1420,8 @@ impl From<&NriStateChangeEvent> for nri::StateChangeEvent {
     }
 }
 
-pub type NriRuntimeRegisterCallback = extern "C" fn(*const NriRegisterPluginRequest) -> c_int;
-pub type NriRuntimeUpdateContainersCallback = extern "C" fn(*const NriUpdateContainersRequest, *mut *mut NriUpdateContainersResponse) -> c_int;
+pub type NriRuntimeRegisterCallback = extern "C" fn(*const c_char, *const NriRegisterPluginRequest) -> c_int;
+pub type NriRuntimeUpdateContainersCallback = extern "C" fn(*const c_char, *const NriUpdateContainersRequest, *mut *mut NriUpdateContainersResponse) -> c_int;
 
 #[derive(Clone)]
 #[repr(C)]

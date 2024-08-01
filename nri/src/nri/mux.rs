@@ -17,6 +17,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::{Mutex, Arc, Once};
 use std::thread;
 
+
 use crate::nri::error::{Result, Error};
 
 
@@ -71,7 +72,8 @@ impl Mux {
                 match stream.read(&mut buffer) {
                     Ok(cnt) => {
                         if cnt == 0 {
-                            continue;
+                            // Connection closed
+                            break;
                         }
                         // println!("Conn {} Read {} bytes", id, cnt);
                         let mut hdr = [0; 8];
@@ -92,7 +94,7 @@ impl Mux {
                     },
                 }
             }
-
+            // println!("isula_rust_extensions::conn_reader: conn {} quit", id);
         });
 
         Ok(())
@@ -136,6 +138,7 @@ impl Mux {
                     println!("isula_rust_extensions::trunk_reader: conn {} not found", cid);
                 }
             }
+            // println!("isula_rust_extensions::trunk_reader: quit");
         });
     }
 
