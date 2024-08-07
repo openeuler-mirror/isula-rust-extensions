@@ -274,7 +274,11 @@ pub fn external_service_shutdown() {
 fn plugin_get(plugin_id: &String) -> Result<Arc<Plugin>> {
     let plugins = PLUGINS.read().map_err(|e| Error::Other(format!("lock error: {}", e)))?;
     if plugins.contains_key(plugin_id) {
-        Ok(plugins.get(plugin_id).unwrap().0.clone())
+        let plugin = plugins.get(plugin_id).unwrap().0.clone();
+        if plugin.mux.is_closed() {
+            return Err(Error::Other("plugin connection closed".to_string()));
+        }
+        Ok(plugin)
     } else {
         Err(Error::Other("client not found".to_string()))
     }

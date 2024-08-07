@@ -124,6 +124,9 @@ fn to_hash_map(x: *const NriMapStringString) -> std::collections::HashMap<String
 }
 
 fn to_nri_map_string_string(x: &std::collections::HashMap<String, String>) -> *const NriMapStringString {
+    if x.is_empty() {
+        return std::ptr::null();
+    }
     let mut keys: Vec<*const c_char> = Vec::new();
     let mut values: Vec<*const c_char> = Vec::new();
     for (key, value) in x.iter() {
@@ -146,14 +149,18 @@ impl Drop for NriMapStringString {
         if !self.key.is_null() {
             let slice = unsafe { std::slice::from_raw_parts(self.key, self.len) };
             for item in slice {
-                let _unused = unsafe { CString::from_raw(*item as *mut c_char) };
+                if !item.is_null() {
+                    let _unused = unsafe { CString::from_raw(*item as *mut c_char) };
+                }
             }
             let _unused = unsafe { Box::from_raw(self.key as *mut *const c_char) };
         }
         if !self.value.is_null() {
             let slice = unsafe { std::slice::from_raw_parts(self.value, self.len) };
             for item in slice {
-                let _unused = unsafe { CString::from_raw(*item as *mut c_char) };
+                if !item.is_null() {
+                    let _unused = unsafe { CString::from_raw(*item as *mut c_char) };
+                }
             }
             let _unused = unsafe { Box::from_raw(self.value as *mut *const c_char) };
         }
@@ -536,7 +543,9 @@ impl Drop for NriLinuxResources {
         if !self.devices.is_null() {
             let slice = unsafe { std::slice::from_raw_parts(self.devices, self.devices_len) };
             for item in slice {
-                let _unused = unsafe { Box::from_raw(*item as *mut NriLinuxDeviceCgroup) };
+                if !item.is_null() {
+                    let _unused = unsafe { Box::from_raw(*item as *mut NriLinuxDeviceCgroup) };
+                }
             }
             let _unused = unsafe { Box::from_raw(self.devices as *mut *const NriLinuxDeviceCgroup) };
         }
@@ -1152,14 +1161,18 @@ impl Drop for NriUpdateContainersRequest {
         if !self.container_updates.is_null() {
             let update = unsafe { std::slice::from_raw_parts(self.container_updates, self.container_updates_len) };
             for i in 0..self.container_updates_len {
-                let _unused = unsafe { Box::from_raw(update[i] as *mut NriContainerUpdate) };
+                if !update[i].is_null() {
+                    let _unused = unsafe { Box::from_raw(update[i] as *mut NriContainerUpdate) };
+                }
             }
             let _unused = unsafe { Box::from_raw(self.container_updates as *mut *const NriContainerUpdate) };
         }
         if !self.evict.is_null() {
             let evict = unsafe { std::slice::from_raw_parts(self.evict, self.evict_len) };
             for i in 0..self.evict_len {
-                let _unused = unsafe { Box::from_raw(evict[i] as *mut NriContainerEviction) };
+                if !evict[i].is_null() {
+                    let _unused = unsafe { Box::from_raw(evict[i] as *mut NriContainerEviction) };
+                }
             }
             let _unused = unsafe { Box::from_raw(self.evict as *mut *const NriContainerEviction) };
         }
@@ -1186,7 +1199,9 @@ impl Drop for NriUpdateContainersResponse {
         if !self.failed.is_null() {
             let failed = unsafe { std::slice::from_raw_parts(self.failed, self.failed_len) };
             for i in 0..self.failed_len {
-                let _unused = unsafe { Box::from_raw(failed[i] as *mut NriContainerUpdate) };
+                if !failed[i].is_null() {
+                    let _unused = unsafe { Box::from_raw(failed[i] as *mut NriContainerUpdate) };
+                }
             }
             let _unused = unsafe { Box::from_raw(self.failed as *mut *const NriContainerUpdate) };
         }

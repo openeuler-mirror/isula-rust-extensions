@@ -144,12 +144,15 @@ impl Mux {
 
     pub fn close(self: Arc<Self>) {
         self.close_once.call_once(|| {
-            let mut conns = self.conns.lock().unwrap();
-            for (_, stream) in conns.drain() {
-                let _unused = stream.shutdown(std::net::Shutdown::Both);
+            let conns = self.conns.lock().unwrap();
+            for (_, stream) in conns.iter() {
+                let _unused = stream.shutdown(std::net::Shutdown::Write);
             }
             let _unused = self.trunk.shutdown(std::net::Shutdown::Both);
         });
     }
 
+    pub fn is_closed(&self) -> bool {
+        self.close_once.is_completed()
+    }
 }
