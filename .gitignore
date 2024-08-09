@@ -1,0 +1,9 @@
+nri/target
+nri/Cargo.lock
+*.rs.bk
+*.rs.fmt
+.vscode
+.idea
+*.o
+nri/src/protocols/*.rs
+!nri/src/protocols/mod.rs
