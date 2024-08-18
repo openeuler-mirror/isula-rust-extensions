@@ -218,6 +218,11 @@ impl From<&NriLinuxMemory> for nri::LinuxMemory {
             disable_oom_killer.value = unsafe { *req.disable_oom_killer } != 0;
             r_rq.disable_oom_killer = MessageField::some(disable_oom_killer);
         }
+        if !req.use_hierarchy.is_null() {
+            let mut use_hierarchy = OptionalBool::new();
+            use_hierarchy.value = unsafe { *req.use_hierarchy } != 0;
+            r_rq.use_hierarchy = MessageField::some(use_hierarchy);
+        }
         r_rq
 
     }
@@ -619,8 +624,9 @@ impl From<&NriPodSandbox> for nri::PodSandbox {
         r_req.id = to_string(req.id);
         r_req.name = to_string(req.name);
         r_req.uid = to_string(req.uid);
-        r_req.labels = to_hash_map(req.labels);
         r_req.namespace = to_string(req.namespace);
+        r_req.labels = to_hash_map(req.labels);
+        r_req.annotations = to_hash_map(req.annotations);
         r_req.runtime_handler =to_string(req.runtime_handler);
         if !req.linux.is_null() {
             r_req.linux = MessageField::some(nri::LinuxPodSandbox::from(unsafe { req.linux.as_ref() }.unwrap()));
@@ -645,7 +651,7 @@ impl From<&NriMount> for nri::Mount {
         let mut r_req = nri::Mount::new();
         r_req.destination = to_string(req.destination);
         r_req.type_ = to_string(req.type_);
-        r_req.source =to_string(req.source);
+        r_req.source = to_string(req.source);
         r_req.options = c_char_ptr_ptr_to_vec(req.options, req.options_len);
         r_req
     }
@@ -929,6 +935,9 @@ impl From<&NriContainerUpdate> for nri::ContainerUpdate {
     fn from(req: &NriContainerUpdate) -> Self {
         let mut r_req = nri::ContainerUpdate::new();
         r_req.container_id = to_string(req.container_id);
+        if !req.linux.is_null() {
+            r_req.linux = MessageField::some(nri::LinuxContainerUpdate::from(unsafe { req.linux.as_ref() }.unwrap()));
+        }
         r_req.ignore_failure = (req.ignore_failure != 0) as bool;
         r_req
     }
