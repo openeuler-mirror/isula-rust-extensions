@@ -1,5 +1,4 @@
 nri/target
-nri/Cargo.lock
 *.rs.bk
 *.rs.fmt
 .vscode

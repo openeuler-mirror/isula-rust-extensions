@@ -177,10 +177,9 @@ pub fn connect(plugin_id: &String, local_fd: RawFd, timeout: i64) -> Result<()> 
 
     // Register one runtime service of container runtime for each plugin.
     let runtime_socket_addr = ("/var/run/nri/").to_string() + plugin_id + ".sock";
-    let nri = Box::new(NriRuntimeService {
+    let nri = Arc::new(NriRuntimeService {
         plugin_id: plugin_id.clone()
-    }) as Box<dyn nri_ttrpc::Runtime + Send + Sync>;
-    let nri = Arc::new(nri);
+    });
     let nriservice = nri_ttrpc::create_runtime(nri);
 
     // for runtime service, we use an abstract unix socket
