@@ -10,162 +10,19 @@
 // NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
 
 use protobuf::{EnumOrUnknown, MessageField};
 
 use crate::protocols::nri::{self, OptionalBool, OptionalFileMode, OptionalInt, OptionalInt64, OptionalString, OptionalUInt32, OptionalUInt64};
 
-pub fn to_string(x: *const c_char) -> String {
-    unsafe {
-        if x.is_null() {
-            "".to_string()
-        } else {
-            CStr::from_ptr(x).to_str().unwrap_or_default().to_string()
-        }
-    }
-}
-
-fn vec_to_double_ptr<T1, T2>(vec: &Vec<T1>) -> (*const *const T2, usize) 
-where
-    T2: for<'a> From<&'a T1>,
-{
-    let len = vec.len();
-    if len == 0 {
-        return (std::ptr::null(), 0);
-    }
-
-    // Allocate memory for the double pointer
-    let double_ptr = vec
-        .iter()
-        .map(|item| Box::into_raw(Box::new(T2::from(item))) as *const T2)
-        .collect::<Vec<*const T2>>()
-        .into_boxed_slice();
-
-    // Convert Box<[T]> to *const T
-    let double_ptr = Box::into_raw(double_ptr) as *const *const T2;
-
-    (double_ptr, len)
-}
-
-fn double_ptr_to_vec<T1, T2>(ptr: *const *const T1, len: usize) -> Vec<T2>
-where
-    T2: for<'a> From<&'a T1>,
-    T2: Default,
-{
-    let mut vec = Vec::new();
-    if ptr.is_null() {
-        return vec;
-    }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-    for item in slice {
-        if (*item).is_null() {
-            vec.push(T2::default())
-        } else {
-            vec.push(T2::from(unsafe { item.as_ref() }.unwrap()));
-        }
-    }
-    vec
-}
-
-fn c_char_ptr_ptr_to_vec(ptr: *const *const c_char, len: usize) -> Vec<String>
-{
-    let mut vec = Vec::new();
-    if ptr.is_null() {
-        return vec;
-    }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-    for item in slice {
-        if item.is_null() {
-            vec.push("".to_string());
-        } else {
-            vec.push(to_string(*item));
-        }
-    }
-    vec
-}
-
-fn vec_to_c_char_ptr_ptr(vec: &Vec<String>) -> (*const *const c_char, usize)
-{
-    let len = vec.len();
-    if len == 0 {
-        return (std::ptr::null(), 0);
-    }
-
-    let mut c_char_ptr_vec = Vec::new();
-    for item in vec.iter() {
-        c_char_ptr_vec.push(CString::new(item.as_str()).unwrap().into_raw());
-    }
-    let c_char_ptr_vec = c_char_ptr_vec.into_boxed_slice();
-    let c_char_ptr = Box::into_raw(c_char_ptr_vec) as *const *const c_char;
-    (c_char_ptr, len)
-}
-
-#[repr(C)]
-pub struct NriMapStringString {
-    key: *const *const c_char,
-    value: *const *const c_char,
-    len: usize,
-}
-
-fn to_hash_map(x: *const NriMapStringString) -> std::collections::HashMap<String, String> {
-    let mut map = std::collections::HashMap::new();
-    if x.is_null() {
-        return map;
-    }
-    let x = unsafe { x.as_ref() }.unwrap();
-    for i in 0..x.len {
-        let key = unsafe { *x.key.add(i) };
-        let value = unsafe { *x.value.add(i) };
-        map.insert(to_string(key), to_string(value));
-    }
-    map
-}
-
-fn to_nri_map_string_string(x: &std::collections::HashMap<String, String>) -> *const NriMapStringString {
-    if x.is_empty() {
-        return std::ptr::null();
-    }
-    let mut keys: Vec<*const c_char> = Vec::new();
-    let mut values: Vec<*const c_char> = Vec::new();
-    for (key, value) in x.iter() {
-        keys.push(CString::new(key.as_str()).unwrap().into_raw());
-        values.push(CString::new(value.as_str()).unwrap().into_raw());
-    }
-    let len = keys.len();
-    let keys = keys.into_boxed_slice();
-    let values = values.into_boxed_slice();
-    let map = NriMapStringString {
-        key: Box::into_raw(keys) as *const *const c_char,
-        value: Box::into_raw(values) as *const *const c_char,
-        len: len,
-    };
-    Box::into_raw(Box::new(map))
-}
-
-impl Drop for NriMapStringString {
-    fn drop(&mut self) {
-        if !self.key.is_null() {
-            let slice = unsafe { std::slice::from_raw_parts(self.key, self.len) };
-            for item in slice {
-                if !item.is_null() {
-                    let _unused = unsafe { CString::from_raw(*item as *mut c_char) };
-                }
-            }
-            let _unused = unsafe { Box::from_raw(self.key as *mut *const c_char) };
-        }
-        if !self.value.is_null() {
-            let slice = unsafe { std::slice::from_raw_parts(self.value, self.len) };
-            for item in slice {
-                if !item.is_null() {
-                    let _unused = unsafe { CString::from_raw(*item as *mut c_char) };
-                }
-            }
-            let _unused = unsafe { Box::from_raw(self.value as *mut *const c_char) };
-        }
-    }
-}
+use isula_common::isula_data_types::to_string;
+use isula_common::isula_data_types::vec_to_double_ptr;
+use isula_common::isula_data_types::double_ptr_to_vec;
+use isula_common::isula_data_types::c_char_ptr_ptr_to_vec;
+use isula_common::isula_data_types::vec_to_c_char_ptr_ptr;
+use isula_common::isula_data_types::MapStringString;
 
 #[repr(C)]
 pub struct NriLinuxMemory {
@@ -467,7 +324,7 @@ pub struct NriLinuxResources {
     hugepage_limits_len: usize,
     blockio_class: *const c_char,
     rdt_class: *const c_char,
-    unified: *const NriMapStringString,
+    unified: *const MapStringString,
     devices: *const *const NriLinuxDeviceCgroup,
     devices_len: usize,
     residual: *const c_void,
@@ -493,7 +350,7 @@ impl From<&NriLinuxResources> for nri::LinuxResources {
             rdt_class.value = to_string(req.rdt_class);
             r_req.rdt_class = MessageField::some(rdt_class);
         }
-        r_req.unified = to_hash_map(req.unified);
+        r_req.unified = unsafe { <std::collections::HashMap<String, String>>::from(&*req.unified) };
         r_req.devices = double_ptr_to_vec(req.devices, req.devices_len);
         r_req
     }
@@ -510,7 +367,7 @@ impl From<&nri::LinuxResources> for NriLinuxResources {
             hugepage_limits_len: hugepage_limits_len,
             blockio_class: req.blockio_class.as_ref().map_or(std::ptr::null(), |x| CString::new(x.value.as_str()).unwrap().into_raw()),
             rdt_class: req.rdt_class.as_ref().map_or(std::ptr::null(), |x| CString::new(x.value.as_str()).unwrap().into_raw()),
-            unified: to_nri_map_string_string(&req.unified),
+            unified: Box::into_raw(Box::new(MapStringString::from(&req.unified))),
             devices: devices,
             devices_len: devices_len,
             residual: std::ptr::null(),
@@ -543,7 +400,7 @@ impl Drop for NriLinuxResources {
             let _unused = unsafe { CString::from_raw(self.rdt_class as *mut c_char) };
         }
         if !self.unified.is_null() {
-            let _unused = unsafe { Box::from_raw(self.unified as *mut NriMapStringString) };
+            let _unused = unsafe { Box::from_raw(self.unified as *mut MapStringString) };
         }
         if !self.devices.is_null() {
             let slice = unsafe { std::slice::from_raw_parts(self.devices, self.devices_len) };
@@ -610,8 +467,8 @@ pub struct NriPodSandbox {
     name: *const c_char,
     uid: *const c_char,
     namespace: *const c_char,
-    labels: *const NriMapStringString,
-    annotations: *const NriMapStringString,
+    labels: *const MapStringString,
+    annotations: *const MapStringString,
     runtime_handler: *const c_char,
     linux: *const NriLinuxPodSandbox,
     pid: u32,
@@ -625,8 +482,8 @@ impl From<&NriPodSandbox> for nri::PodSandbox {
         r_req.name = to_string(req.name);
         r_req.uid = to_string(req.uid);
         r_req.namespace = to_string(req.namespace);
-        r_req.labels = to_hash_map(req.labels);
-        r_req.annotations = to_hash_map(req.annotations);
+        r_req.labels = unsafe { <std::collections::HashMap<String, String>>::from(&*req.labels) };
+        r_req.annotations = unsafe { <std::collections::HashMap<String, String>>::from(&*req.annotations) };
         r_req.runtime_handler =to_string(req.runtime_handler);
         if !req.linux.is_null() {
             r_req.linux = MessageField::some(nri::LinuxPodSandbox::from(unsafe { req.linux.as_ref() }.unwrap()));
@@ -837,8 +694,8 @@ pub struct NriContainer {
     pod_sandbox_id: *const c_char,
     name: *const c_char,
     state: i32,
-    labels: *const NriMapStringString,
-    annotations: *const NriMapStringString,
+    labels: *const MapStringString,
+    annotations: *const MapStringString,
     args: *const *const c_char,
     args_len: usize,
     env: *const *const c_char,
@@ -860,8 +717,8 @@ impl From<&NriContainer> for nri::Container {
         r_req.pod_sandbox_id = to_string(req.pod_sandbox_id);
         r_req.name = to_string(req.name);
         r_req.state = EnumOrUnknown::from_i32(req.state);
-        r_req.labels = to_hash_map(req.labels);
-        r_req.annotations = to_hash_map(req.annotations);
+        r_req.labels = unsafe { <std::collections::HashMap<String, String>>::from(&*req.labels) };
+        r_req.annotations = unsafe { <std::collections::HashMap<String, String>>::from(&*req.annotations) };
         r_req.args = c_char_ptr_ptr_to_vec(req.args, req.args_len);
         r_req.env = c_char_ptr_ptr_to_vec(req.env, req.env_len);
         r_req.mounts = double_ptr_to_vec(req.mounts, req.mounts_len);
@@ -1050,7 +907,7 @@ impl From<&nri::LinuxContainerAdjustment> for NriLinuxContainerAdjustment {
 
 #[repr(C)]
 pub struct NriContainerAdjustment {
-    annotations: *const NriMapStringString,
+    annotations: *const MapStringString,
     mounts: *const *const NriMount,
     mounts_len: usize,
     env: *const *const NriKeyValue,
@@ -1068,7 +925,7 @@ impl From<&nri::ContainerAdjustment> for NriContainerAdjustment {
         let (env, env_len) = vec_to_double_ptr(&req.env);
         let (rlimits, rlimits_len) = vec_to_double_ptr(&req.rlimits);
         let r_req = NriContainerAdjustment {
-            annotations: to_nri_map_string_string(&req.annotations),
+            annotations: Box::into_raw(Box::new(MapStringString::from(&req.annotations))),
             mounts: mounts,
             mounts_len: mounts_len,
             env: env,
