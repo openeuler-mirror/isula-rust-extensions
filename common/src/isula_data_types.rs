@@ -12,6 +12,7 @@
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use prost::Message;
 
 pub fn to_string(x: *const c_char) -> String {
     unsafe {
@@ -98,6 +99,96 @@ pub fn vec_to_c_char_ptr_ptr(vec: &Vec<String>) -> (*const *const c_char, usize)
 }
 
 #[repr(C)]
+pub struct ByteArray {
+    pub data: *const u8,
+    pub len: usize,
+}
+
+impl ByteArray {
+    pub fn new(data: *const u8, len: usize) -> Self {
+        ByteArray {
+            data: data,
+            len: len,
+        }
+    }
+}
+
+impl From<&ByteArray> for prost_types::Any {
+    fn from(arr: &ByteArray) -> Self {
+        if arr.data.is_null() || arr.len == 0 {
+            return prost_types::Any::default();
+        }
+        let encoded = unsafe { std::slice::from_raw_parts(arr.data, arr.len) };
+        match prost_types::Any::decode(encoded) {
+            Ok(options) => options,
+            Err(e) => {
+                println!("Failed to decode options, {:?}", e);
+                prost_types::Any::default()
+            }
+        }
+    }
+}
+
+impl From<&prost_types::Any> for ByteArray {
+    fn from(data: &prost_types::Any) -> Self {
+        let mut buf = Vec::new();
+        match data.encode(& mut buf) {
+            Ok(_) => {
+                let len = buf.len();
+                let buf_data = buf.into_boxed_slice();
+                ByteArray {
+                    data: Box::into_raw(buf_data) as *const u8,
+                    len: len,
+                }
+            },
+            Err(e) => {
+                println!("Failed to encode options, {:?}", e);
+                ByteArray {
+                    data: std::ptr::null(),
+                    len: 0,
+                }
+            }
+        }
+    }
+}
+
+impl Drop for ByteArray {
+    fn drop(&mut self) {
+        if !self.data.is_null() {
+            let _unused = unsafe { Box::from_raw(self.data as *mut u8) };
+        }
+    }
+}
+
+const SECOND_TO_NANOS: u64 = 1_000_000_000;
+const MAX_NANOS: u64 = 999_999_999;
+const MAX_SECONDS: u64 = 253_402_300_799; // 9999-12-31T23:59:59Z
+pub fn u64_to_prost_timestamp(data: u64) -> prost_types::Timestamp {
+    let mut timestamp = prost_types::Timestamp::default();
+    timestamp.seconds = (data / SECOND_TO_NANOS) as i64;
+    timestamp.nanos = (data % SECOND_TO_NANOS) as i32;
+    timestamp
+}
+
+pub fn prost_timestamp_to_u64(data: &prost_types::Timestamp) -> u64 {
+    let seconds = if data.seconds < 0 {
+        0
+    } else if data.seconds as u64 > MAX_SECONDS {
+        MAX_SECONDS
+    } else {
+        data.seconds as u64
+    };
+    let nanos = if data.nanos < 0 {
+        0
+    } else if data.nanos as u64 > MAX_NANOS {
+        MAX_NANOS
+    } else {
+        data.nanos as u64
+    };
+    seconds * SECOND_TO_NANOS + nanos
+}
+
+#[repr(C)]
 pub struct MapStringString {
     key: *const *const c_char,
     value: *const *const c_char,
@@ -165,6 +256,76 @@ impl Drop for MapStringString {
                 }
             }
             let _unused = unsafe { Box::from_raw(self.value as *mut *const c_char) };
+        }
+    }
+}
+
+#[repr(C)]
+pub struct MapStringBytes {
+    key: *const *const c_char,
+    value: * const ByteArray,
+    len: usize,
+}
+
+impl From <&std::collections::HashMap<String, prost_types::Any>> for MapStringBytes {
+    fn from(x: &std::collections::HashMap<String, prost_types::Any>) -> Self {
+        if x.is_empty() {
+            return MapStringBytes {
+                key: std::ptr::null(),
+                value: std::ptr::null(),
+                len: 0,
+            }
+        }
+        let mut keys: Vec<*const c_char> = Vec::new();
+        let mut values: Vec<ByteArray> = Vec::new();
+        for (key, value) in x.iter() {
+            keys.push(CString::new(key.as_str()).unwrap().into_raw());
+            values.push(ByteArray::from(value));
+        }
+        let len = keys.len();
+        let keys = keys.into_boxed_slice();
+        let values = values.into_boxed_slice();
+        let map = MapStringBytes {
+            key: Box::into_raw(keys) as *const *const c_char,
+            value: Box::into_raw(values) as *const ByteArray,
+            len: len,
+        };
+        map
+    }
+}
+
+impl From <&MapStringBytes> for std::collections::HashMap<String, prost_types::Any> {
+    fn from(x: &MapStringBytes) -> Self {
+        let mut map = std::collections::HashMap::new();
+        if x.key.is_null() {
+            return map;
+        }
+        let keys: &[*const c_char] = unsafe { std::slice::from_raw_parts(x.key, x.len) };
+        let values: &[ByteArray] = unsafe { std::slice::from_raw_parts(x.value, x.len) };
+        for i in 0..x.len {
+            map.insert(to_string(keys[i]), prost_types::Any::from(&values[i]));
+        }
+        map
+    }
+}
+
+impl Drop for MapStringBytes {
+    fn drop(&mut self) {
+        if !self.key.is_null() {
+            let slice = unsafe { std::slice::from_raw_parts(self.key, self.len) };
+            for item in slice {
+                if !item.is_null() {
+                    let _unused = unsafe { CString::from_raw(*item as *mut c_char) };
+                }
+            }
+            let _unused = unsafe { Box::from_raw(self.key as *mut *const c_char) };
+        }
+        if !self.value.is_null() {
+            let slice = unsafe { std::slice::from_raw_parts(self.value, self.len) };
+            for item in slice {
+                let _unused = item;
+            }
+            let _unused = unsafe { Box::from_raw(self.value as *mut ByteArray) };
         }
     }
 }
