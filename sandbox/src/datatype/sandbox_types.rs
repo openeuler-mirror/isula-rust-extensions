@@ -13,7 +13,7 @@
 
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
-use isula_common::isula_data_types::{ByteArray, MapStringBytes, MapStringString};
+use isula_common::isula_data_types::{Any, MapStringAny, MapStringString};
 use isula_common::isula_data_types::to_string;
 use isula_common::isula_data_types::{vec_to_c_char_ptr_ptr, c_char_ptr_ptr_to_vec};
 use isula_common::isula_data_types::double_ptr_to_vec;
@@ -33,66 +33,57 @@ pub struct SandboxMount {
 }
 
 impl From<&SandboxMount> for sandbox::Mount {
-    fn from(req: &SandboxMount) -> Self {
-        let mut r_req = sandbox::Mount::default();
-        r_req.target = to_string(req.destination);
-        r_req.r#type = to_string(req.type_);
-        r_req.source = to_string(req.source);
-        r_req.options = c_char_ptr_ptr_to_vec(req.options, req.options_len);
-        r_req
+    fn from(mnt: &SandboxMount) -> Self {
+        let mut r_mnt = sandbox::Mount::default();
+        r_mnt.target = to_string(mnt.destination);
+        r_mnt.r#type = to_string(mnt.type_);
+        r_mnt.source = to_string(mnt.source);
+        r_mnt.options = c_char_ptr_ptr_to_vec(mnt.options, mnt.options_len);
+        r_mnt
     }
 }
 
 impl From<&sandbox::Mount> for SandboxMount {
-    fn from(req: &sandbox::Mount) -> Self {
-        let (options, options_len) = vec_to_c_char_ptr_ptr(&req.options);
-        let r_req = SandboxMount {
-            destination: CString::new(req.target.as_str()).unwrap().into_raw(),
-            type_: CString::new(req.r#type.as_str()).unwrap().into_raw(),
-            source: CString::new(req.source.as_str()).unwrap().into_raw(),
+    fn from(mnt: &sandbox::Mount) -> Self {
+        let (options, options_len) = vec_to_c_char_ptr_ptr(&mnt.options);
+        let r_mnt = SandboxMount {
+            destination: CString::new(mnt.target.as_str()).unwrap().into_raw(),
+            type_: CString::new(mnt.r#type.as_str()).unwrap().into_raw(),
+            source: CString::new(mnt.source.as_str()).unwrap().into_raw(),
             options: options,
             options_len: options_len,
             residual: std::ptr::null(),
         };
-        r_req
+        r_mnt
     }
 }
 
 #[repr(C)]
 pub struct SandboxSandboxRuntime {
     name: *const c_char,
-    options: *const u8,
-    options_len: usize,
+    options: *const Any,
+    residual: *const c_void,
 }
 
 impl From<&SandboxSandboxRuntime> for sandbox::sandbox::Runtime {
     fn from(req: &SandboxSandboxRuntime) -> Self {
         let mut r_req = sandbox::sandbox::Runtime::default();
         r_req.name = to_string(req.name);
-        if req.options.is_null() || req.options_len == 0 {
-            r_req.options = None;
-        } else {
-            let req_options = unsafe { std::slice::from_raw_parts(req.options, req.options_len) };
-            let any = prost_types::Any {
-                type_url: "".to_string(), // TODO: fill in the type url
-                value: req_options.to_vec(),
-            };
-            r_req.options = Some(any);
-        }
+        r_req.options = unsafe {req.options.as_ref()}.map(|prost_any| prost_types::Any::from(prost_any));
         r_req
     }
 }
 
 impl From<&sandbox::sandbox::Runtime> for SandboxSandboxRuntime {
-    fn from(req: &sandbox::sandbox::Runtime) -> Self {
-        let options = req.options.clone().unwrap_or_else(|| prost_types::Any::default());
-        let buf = options.value.clone();
-        let r_req = SandboxSandboxRuntime {
-            name: CString::new(req.name.as_str()).unwrap().into_raw(),
-            options_len: buf.len(),
-            options: Box::into_raw(buf.into_boxed_slice()) as *const u8,
+    fn from(runtime: &sandbox::sandbox::Runtime) -> Self {
+        let r_runtime = SandboxSandboxRuntime {
+            name: CString::new(runtime.name.as_str()).unwrap().into_raw(),
+            options: runtime.options.as_ref()
+                .map(|prost_any| Box::into_raw(Box::new(Any::from(prost_any))) as *const Any)
+                .unwrap_or(std::ptr::null()),
+            residual: std::ptr::null(),
         };
-        r_req
+        r_runtime
     }
 }
 
@@ -100,87 +91,56 @@ impl From<&sandbox::sandbox::Runtime> for SandboxSandboxRuntime {
 pub struct SandboxSandbox {
     sandbox_id: *const c_char,
     runtime: *const SandboxSandboxRuntime,
-    spec: *const u8,
-    spec_len: usize,
+    spec: *const Any,
     labels: *const MapStringString,
     created_at: u64,
     updated_at: u64,
-    extensions: *const MapStringBytes,
+    extensions: *const MapStringAny,
     sandboxer: *const c_char,
     residual: *const c_void,
 }
 
 impl From<&SandboxSandbox> for sandbox::Sandbox {
-    fn from(req: &SandboxSandbox) -> Self {
-        let mut r_req = sandbox::Sandbox::default();
-        r_req.sandbox_id = to_string(req.sandbox_id);
-        match unsafe { req.runtime.as_ref() } {
-            Some(runtime) => {
-                r_req.runtime = Some(sandbox::sandbox::Runtime::from(&*runtime));
-            }
-            None => {
-                r_req.runtime = None;
-            }
-        }
-        if req.spec.is_null() || req.spec_len == 0 {
-            r_req.spec = None;
-        } else {
-            // r_req.spec = Some(prost_types::Any::from(&ByteArray::new(req.spec, req.spec_len)));
-            let any = prost_types::Any {
-                type_url: "".to_string(), // TODO: fill in the type url
-                value: unsafe { std::slice::from_raw_parts(req.spec, req.spec_len) }.to_vec(),
-            };
-            r_req.spec = Some(any);
-        }
-        if req.labels.is_null() {
-            r_req.labels = std::collections::HashMap::new();
-        } else {
-            r_req.labels = unsafe { <std::collections::HashMap<String, String>>::from(&*req.labels) };
-        }
-        r_req.created_at = Some(u64_to_prost_timestamp(req.created_at));
-        r_req.updated_at = Some(u64_to_prost_timestamp(req.updated_at));
-        if req.extensions.is_null() {
-            r_req.extensions = std::collections::HashMap::new();
-        } else {
-            r_req.extensions = unsafe { <std::collections::HashMap<String, prost_types::Any>>::from(&*req.extensions) };
-        }
-        r_req.sandboxer = to_string(req.sandboxer);
-        r_req
+    fn from(sandbox: &SandboxSandbox) -> Self {
+        let mut r_sandbox = sandbox::Sandbox::default();
+        r_sandbox.sandbox_id = to_string(sandbox.sandbox_id);
+        r_sandbox.runtime = unsafe { sandbox.runtime.as_ref() }.map(|rt| sandbox::sandbox::Runtime::from(&*rt));
+        r_sandbox.spec = unsafe {sandbox.spec.as_ref()}.map(|prost_any| prost_types::Any::from(prost_any));
+        r_sandbox.labels = unsafe {sandbox.labels.as_ref()}
+            .map(|map| <std::collections::HashMap<String, String>>::from(&*map))
+            .unwrap_or(std::collections::HashMap::new());
+        r_sandbox.created_at = Some(u64_to_prost_timestamp(sandbox.created_at));
+        r_sandbox.updated_at = Some(u64_to_prost_timestamp(sandbox.updated_at));
+        r_sandbox.extensions = unsafe {sandbox.extensions.as_ref()}
+            .map(|map| <std::collections::HashMap<String, prost_types::Any>>::from(&*map))
+            .unwrap_or(std::collections::HashMap::new());
+        r_sandbox.sandboxer = to_string(sandbox.sandboxer);
+        r_sandbox
     }
 }
 
 impl From<&sandbox::Sandbox> for SandboxSandbox {
-    fn from(req: &sandbox::Sandbox) -> Self {
-        let spec_byte_array = match &req.spec {
-            Some(spec) => {
-                ByteArray::from(spec)
-            },
-            None => ByteArray::new(std::ptr::null(), 0)
-        };
-        let created_at = match &req.created_at {
-            Some(timestamp) => prost_timestamp_to_u64(timestamp),
-            None => 0
-        };
-        let update_at = match &req.updated_at {
-            Some(timestamp) => prost_timestamp_to_u64(timestamp),
-            None => 0
-        };
-        let r_req = SandboxSandbox {
-            sandbox_id: CString::new(req.sandbox_id.as_str()).unwrap().into_raw(),
-            runtime: match &req.runtime {
-                Some(rt) => Box::into_raw(Box::new(SandboxSandboxRuntime::from(rt))),
-                None => std::ptr::null(),
-            },
-            spec: spec_byte_array.data,
-            spec_len: spec_byte_array.len,
-            labels: Box::into_raw(Box::new(MapStringString::from(&req.labels))),
-            created_at: created_at,
-            updated_at: update_at,
-            extensions: Box::into_raw(Box::new(MapStringBytes::from(&req.extensions))),
-            sandboxer: CString::new(req.sandboxer.as_str()).unwrap().into_raw(),
+    fn from(sandbox: &sandbox::Sandbox) -> Self {
+        let r_sandbox = SandboxSandbox {
+            sandbox_id: CString::new(sandbox.sandbox_id.as_str()).unwrap().into_raw(),
+            runtime: sandbox.runtime.as_ref()
+                .map(|rt| Box::into_raw(Box::new(SandboxSandboxRuntime::from(rt))) as *const SandboxSandboxRuntime)
+                .unwrap_or(std::ptr::null()),
+            spec: sandbox.spec.as_ref()
+                .map(|prost_any| Box::into_raw(Box::new(Any::from(prost_any))) as *const Any)
+                .unwrap_or(std::ptr::null()),
+            labels: Box::into_raw(Box::new(MapStringString::from(&sandbox.labels))),
+            created_at: sandbox.created_at.as_ref()
+                .map(|timestamp| prost_timestamp_to_u64(&timestamp))
+                .unwrap_or(0),
+            updated_at: sandbox.updated_at.as_ref()
+                .map(|timestamp| prost_timestamp_to_u64(&timestamp))
+                .unwrap_or(0),
+            extensions: Box::into_raw(Box::new(MapStringAny::from(&sandbox.extensions))),
+            sandboxer: CString::new(sandbox.sandboxer.as_str()).unwrap().into_raw(),
             residual: std::ptr::null(),
         };
-        r_req
+        r_sandbox
     }
 }
 
@@ -190,8 +150,7 @@ pub struct SandboxCreateRequest {
     sandbox_id: *const c_char,
     rootfs: *const *const SandboxMount,
     rootfs_len: usize,
-    options: *const u8,
-    options_len: usize,
+    options: *const Any,
     netns_path: *const c_char,
     annotations: *const MapStringString,
     sandbox: *const SandboxSandbox,
@@ -204,30 +163,12 @@ impl From<&SandboxCreateRequest> for sandbox_services::ControllerCreateRequest {
         let mut r_req = sandbox_services::ControllerCreateRequest::default();
         r_req.sandbox_id = to_string(req.sandbox_id);
         r_req.rootfs = double_ptr_to_vec(req.rootfs, req.rootfs_len);
-        if req.options.is_null() || req.options_len == 0 {
-            r_req.options = None;
-        } else {
-            let encoded = unsafe { std::slice::from_raw_parts(req.options, req.options_len) };
-            let any = prost_types::Any {
-                type_url: "".to_string(), // TODO: fill in the type url
-                value: encoded.to_vec(),
-            };
-            r_req.options = Some(any);
-        }
+        r_req.options = unsafe {req.options.as_ref()}.map(|any| prost_types::Any::from(&*any));
         r_req.netns_path = to_string(req.netns_path);
-        if req.annotations.is_null() {
-            r_req.annotations = std::collections::HashMap::new();
-        } else {
-            r_req.annotations = unsafe { <std::collections::HashMap<String, String>>::from(&*req.annotations) };
-        }
-        match unsafe { req.sandbox.as_ref() } {
-            Some(sandbox) => {
-                r_req.sandbox = Some(sandbox::Sandbox::from(&*sandbox));
-            }
-            None => {
-                r_req.sandbox = None;
-            }
-        }
+        r_req.annotations = unsafe {req.annotations.as_ref()}
+            .map(|map| <std::collections::HashMap<String, String>>::from(&*map))
+            .unwrap_or(std::collections::HashMap::new());
+        r_req.sandbox = unsafe { req.sandbox.as_ref() }.map(|sandbox| sandbox::Sandbox::from(&*sandbox));
         r_req.sandboxer = to_string(req.sandboxer);
         r_req
     }
@@ -276,10 +217,9 @@ impl SandboxStartResponse {
     pub fn from_controller(&mut self, req: &sandbox_services::ControllerStartResponse) {
         self.sandbox_id = CString::new(req.sandbox_id.as_str()).unwrap().into_raw();
         self.pid = req.pid;
-        self.created_at = match &req.created_at {
-            Some(timestamp) => prost_timestamp_to_u64(timestamp),
-            None => 0
-        };
+        self.created_at = req.created_at.as_ref()
+            .map(|timestamp| prost_timestamp_to_u64(&timestamp))
+            .unwrap_or(0);
         self.labels = Box::into_raw(Box::new(MapStringString::from(&req.labels)));
         self.address = CString::new(req.address.as_str()).unwrap().into_raw();
         self.version = req.version;
@@ -365,10 +305,9 @@ pub struct SandboxWaitResponse {
 impl SandboxWaitResponse {
     pub fn from_controller(&mut self, rsp: &sandbox_services::ControllerWaitResponse) {
         self.exit_status = rsp.exit_status;
-        self.exited_at = match &rsp.exited_at {
-            Some(timestamp) => prost_timestamp_to_u64(timestamp),
-            None => 0
-        };
+        self.exited_at = rsp.exited_at.as_ref()
+            .map(|timestamp| prost_timestamp_to_u64(&timestamp))
+            .unwrap_or(0);
     }
 }
 
@@ -398,8 +337,7 @@ pub struct SandboxStatusResponse {
     info: *const MapStringString,
     created_at: u64,
     exited_at: u64,
-    extra: *const u8,
-    extra_len: usize,
+    extra: *const Any,
     address: *const c_char,
     version: u32,
     residual: *const c_void,
@@ -411,19 +349,15 @@ impl SandboxStatusResponse {
         self.pid = rsp.pid;
         self.state = CString::new(rsp.state.as_str()).unwrap().into_raw();
         self.info = Box::into_raw(Box::new(MapStringString::from(&rsp.info)));
-        self.created_at = match &rsp.created_at {
-            Some(timestamp) => prost_timestamp_to_u64(timestamp),
-            None => 0
-        };
-        self.exited_at = match &rsp.exited_at {
-            Some(timestamp) => prost_timestamp_to_u64(timestamp),
-            None => 0
-        };
-        rsp.extra.as_ref().map(|extra| {
-            let value = extra.value.clone();
-            self.extra_len = value.len();
-            self.extra = Box::into_raw(Box::new(value.into_boxed_slice())) as *const u8;
-        });
+        self.created_at = rsp.created_at.as_ref()
+            .map(|timestamp| prost_timestamp_to_u64(&timestamp))
+            .unwrap_or(0);
+        self.exited_at = rsp.exited_at.as_ref()
+            .map(|timestamp| prost_timestamp_to_u64(&timestamp))
+            .unwrap_or(0);
+        self.extra = rsp.extra.as_ref()
+            .map(|prost_any| {Box::into_raw(Box::new(Any::from(prost_any))) as *const Any})
+            .unwrap_or(std::ptr::null());
         self.address = CString::new(rsp.address.as_str()).unwrap().into_raw();
         self.version = rsp.version;
     }
@@ -465,8 +399,7 @@ impl From<&SandboxMetricsRequest> for sandbox_services::ControllerMetricsRequest
 pub struct SandboxMetricsResponse {
     timestamp: u64,
     id: *const c_char,
-    data: *const u8,
-    data_len: usize,
+    data: *const Any,
     residual: *const c_void,
 }
 
@@ -476,16 +409,13 @@ impl SandboxMetricsResponse {
             Some(metrics) => metrics,
             None => return
         };
-        self.timestamp = match &metrics.timestamp {
-            Some(timestamp) => prost_timestamp_to_u64(timestamp),
-            None => 0
-        };
+        self.timestamp = metrics.timestamp.as_ref()
+            .map(|timestamp| prost_timestamp_to_u64(&timestamp))
+            .unwrap_or(0);
         self.id = CString::new(metrics.id.as_str()).unwrap().into_raw();
-        metrics.data.as_ref().map(|data| {
-            let value = data.value.clone();
-            self.data_len = value.len();
-            self.data = Box::into_raw(Box::new(value.into_boxed_slice())) as *const u8;
-        });
+        self.data = metrics.data.as_ref()
+            .map(|prost_any| {Box::into_raw(Box::new(Any::from(prost_any))) as *const Any})
+            .unwrap_or(std::ptr::null());
     }
 }
 
@@ -504,14 +434,7 @@ impl From<&SandboxUpdateRequest> for sandbox_services::ControllerUpdateRequest {
         let mut r_req = sandbox_services::ControllerUpdateRequest::default();
         r_req.sandbox_id = to_string(req.sandbox_id);
         r_req.sandboxer = to_string(req.sandboxer);
-        match unsafe { req.sandbox.as_ref() } {
-            Some(sandbox) => {
-                r_req.sandbox = Some(sandbox::Sandbox::from(&*sandbox));
-            }
-            None => {
-                r_req.sandbox = None;
-            }
-        }
+        r_req.sandbox = unsafe{req.sandbox.as_ref()}.map(|sandbox| sandbox::Sandbox::from(&*sandbox));
         r_req.fields = c_char_ptr_ptr_to_vec(req.fields, req.fields_len);
         r_req
     }
