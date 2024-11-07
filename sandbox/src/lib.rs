@@ -14,14 +14,23 @@
 mod controller;
 mod datatype;
 use controller::client;
-use datatype::request;
-use std::os::raw::{c_char, c_int, c_uint};
+use datatype::sandbox_types;
+use std::os::raw::{c_char, c_int};
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 
 use isula_common::isula_data_types::to_string;
 
 use controller::client::sandbox::containerd::services::sandbox::v1::ControllerCreateRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerStartRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerPlatformRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerStopRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerWaitRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerStatusRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerShutdownRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerMetricsRequest;
+use controller::client::sandbox::containerd::services::sandbox::v1::ControllerUpdateRequest;
+
 
 lazy_static! {
     static ref RT: Runtime = match Runtime::new() {
@@ -60,6 +69,45 @@ impl ControllerContext {
     }
 }
 
+macro_rules! sandbox_api_execute {
+    ($context:ident, $request:ident, $rsp:ident, $method:ident) => {
+        match $context.get_client() {
+            Some(client) => {
+                match RT.block_on((*client).$method($request)) {
+                    Ok(response) => {
+                        (*$rsp).from_controller(&response);
+                        0
+                    }
+                    Err(e) => {
+                        println!("Sandbox API: Failed to execute sandbox API, {:?}", e);
+                        -1
+                    }
+                }
+            }
+            None => {
+                println!("Sandbox API: Failed to execute sandbox API, client is None");
+                -1
+            }
+        }
+    };
+    ($context:ident, $request:ident, $method:ident) => {
+        match $context.get_client() {
+            Some(client) => {
+                match RT.block_on((*client).$method($request)) {
+                    Ok(_) => 0,
+                    Err(e) => {
+                        println!("Sandbox API: Failed to execute sandbox API, {:?}", e);
+                        -1
+                    }
+                }
+            }
+            None => {
+                println!("Sandbox API: Failed to execute sandbox API, client is None");
+                -1
+            }
+        }
+    };
+}
 
 #[no_mangle]
 pub extern "C" fn sandbox_api_build_controller(
@@ -84,27 +132,104 @@ pub extern "C" fn sandbox_api_build_controller(
 #[no_mangle]
 pub unsafe extern "C" fn sandbox_api_create(
     handle: ControllerHandle,
-    req: *const request::SandboxCreateRequest,
-    rsp: *mut request::SandboxCreateResponse,
+    req: *const sandbox_types::SandboxCreateRequest,
+    rsp: *mut sandbox_types::SandboxCreateResponse,
 ) -> c_int {
     let controller_context = &mut *handle;
     let r_req = ControllerCreateRequest::from(&*req);
-    match controller_context.get_client() {
-        Some(client) => {
-            match RT.block_on((*client).create(r_req)) {
-                Ok(response) => {
-                    (*rsp).sandbox_id = response.sandbox_id.as_ptr() as *const c_char;
-                    0
-                }
-                Err(e) => {
-                    println!("Sandbox API: Failed to create sandbox, {:?}", e);
-                    -1
-                }
-            }
-        }
-        None => {
-            println!("Sandbox API: Failed to create sandbox, client is None");
-            -1
-        }
-    }
+    println!("Sandbox API: Create request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, rsp, create)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_start(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxStartRequest,
+    rsp: *mut sandbox_types::SandboxStartResponse,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req= ControllerStartRequest::from(&*req);
+    println!("Sandbox API: Start request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, rsp, start)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_platform(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxPlatformRequest,
+    rsp: *mut sandbox_types::SandboxPlatformResponse,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerPlatformRequest::from(&*req);
+    println!("Sandbox API: Platform request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, rsp, platform)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_stop(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxStopRequest,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerStopRequest::from(&*req);
+    println!("Sandbox API: Stop request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, stop)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_wait(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxWaitRequest,
+    rsp: *mut sandbox_types::SandboxWaitResponse,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerWaitRequest::from(&*req);
+    println!("Sandbox API: Wait request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, rsp, wait)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_status(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxStatusRequest,
+    rsp: *mut sandbox_types::SandboxStatusResponse,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerStatusRequest::from(&*req);
+    println!("Sandbox API: Status request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, rsp, status)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_shutdown(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxShutdownRequest,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerShutdownRequest::from(&*req);
+    println!("Sandbox API: Shutdown request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, shutdown)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_metrics(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxMetricsRequest,
+    rsp: *mut sandbox_types::SandboxMetricsResponse,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerMetricsRequest::from(&*req);
+    println!("Sandbox API: Metrics request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, rsp, metrics)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_update(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxUpdateRequest,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerUpdateRequest::from(&*req);
+    println!("Sandbox API: Update request: {:?}", r_req);
+    sandbox_api_execute!(controller_context, r_req, update)
 }

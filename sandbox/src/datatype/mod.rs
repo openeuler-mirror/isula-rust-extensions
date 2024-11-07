@@ -11,5 +11,4 @@
 // See the Mulan PSL v2 for more details.
 
 #[macro_use]
-pub mod request;
-pub mod response;
+pub mod sandbox_types;
