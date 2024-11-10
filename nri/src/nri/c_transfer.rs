@@ -350,7 +350,10 @@ impl From<&NriLinuxResources> for nri::LinuxResources {
             rdt_class.value = to_string(req.rdt_class);
             r_req.rdt_class = MessageField::some(rdt_class);
         }
-        r_req.unified = unsafe { <std::collections::HashMap<String, String>>::from(&*req.unified) };
+        r_req.unified = match req.unified.is_null() {
+            true => std::collections::HashMap::new(),
+            false => unsafe { <std::collections::HashMap<String, String>>::from(&*req.unified) },
+        };
         r_req.devices = double_ptr_to_vec(req.devices, req.devices_len);
         r_req
     }
@@ -482,8 +485,14 @@ impl From<&NriPodSandbox> for nri::PodSandbox {
         r_req.name = to_string(req.name);
         r_req.uid = to_string(req.uid);
         r_req.namespace = to_string(req.namespace);
-        r_req.labels = unsafe { <std::collections::HashMap<String, String>>::from(&*req.labels) };
-        r_req.annotations = unsafe { <std::collections::HashMap<String, String>>::from(&*req.annotations) };
+        r_req.labels = match req.labels.is_null() {
+            true => std::collections::HashMap::new(),
+            false => unsafe { <std::collections::HashMap<String, String>>::from(&*req.labels) },
+        };
+        r_req.annotations = match req.annotations.is_null() {
+            true => std::collections::HashMap::new(),
+            false => unsafe { <std::collections::HashMap<String, String>>::from(&*req.annotations) },
+        };
         r_req.runtime_handler =to_string(req.runtime_handler);
         if !req.linux.is_null() {
             r_req.linux = MessageField::some(nri::LinuxPodSandbox::from(unsafe { req.linux.as_ref() }.unwrap()));
@@ -717,8 +726,14 @@ impl From<&NriContainer> for nri::Container {
         r_req.pod_sandbox_id = to_string(req.pod_sandbox_id);
         r_req.name = to_string(req.name);
         r_req.state = EnumOrUnknown::from_i32(req.state);
-        r_req.labels = unsafe { <std::collections::HashMap<String, String>>::from(&*req.labels) };
-        r_req.annotations = unsafe { <std::collections::HashMap<String, String>>::from(&*req.annotations) };
+        r_req.labels = match req.labels.is_null() {
+            true => std::collections::HashMap::new(),
+            false => unsafe { <std::collections::HashMap<String, String>>::from(&*req.labels) },
+        };
+        r_req.annotations = match req.annotations.is_null() {
+            true => std::collections::HashMap::new(),
+            false => unsafe { <std::collections::HashMap<String, String>>::from(&*req.annotations) },
+        };
         r_req.args = c_char_ptr_ptr_to_vec(req.args, req.args_len);
         r_req.env = c_char_ptr_ptr_to_vec(req.env, req.env_len);
         r_req.mounts = double_ptr_to_vec(req.mounts, req.mounts_len);
