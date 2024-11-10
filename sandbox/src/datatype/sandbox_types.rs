@@ -303,6 +303,15 @@ pub struct SandboxWaitResponse {
 }
 
 impl SandboxWaitResponse {
+    pub fn new() -> Self {
+        Self {
+            sandbox_id: std::ptr::null(),
+            exit_status: 0,
+            exited_at: 0,
+            residual: std::ptr::null(),
+        }
+    }
+
     pub fn from_controller(&mut self, rsp: &sandbox_services::ControllerWaitResponse) {
         self.exit_status = rsp.exit_status;
         self.exited_at = rsp.exited_at.as_ref()

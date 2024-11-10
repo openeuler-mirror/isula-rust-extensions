@@ -32,8 +32,10 @@ use sandbox::containerd::services::sandbox::v1::ControllerUpdateRequest;
 use sandbox::containerd::services::sandbox::v1::ControllerUpdateResponse;
 
 use tonic::transport::Channel;
-
+use tower::ServiceExt;
+#[derive(Debug, Clone)]
 pub struct Client {
+    pub channel: Channel,
     pub client: ControllerClient<Channel>,
 }
 
@@ -60,8 +62,11 @@ pub async fn connect(
 impl Client {
     pub async fn new(address: String) -> Result<Client, Box<dyn std::error::Error>> {
         let channel = connect(address).await?;
-        let client = ControllerClient::new(channel);
-        Ok(Client { client })
+        let client = ControllerClient::new(channel.clone());
+        Ok(Client {
+            channel: channel.clone(),
+            client,
+        })
     }
 
     pub async fn create(
@@ -125,5 +130,9 @@ impl Client {
         request: ControllerUpdateRequest) -> Result<ControllerUpdateResponse, tonic::Status> {
         let response = self.client.update(request).await?;
         Ok(response.into_inner())
+    }
+
+    pub async fn is_connection_alive(&mut self) -> bool {
+        self.channel.ready().await.is_ok()
     }
 }

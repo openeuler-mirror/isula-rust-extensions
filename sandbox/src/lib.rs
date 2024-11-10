@@ -15,7 +15,11 @@ mod controller;
 mod datatype;
 use controller::client;
 use datatype::sandbox_types;
-use std::os::raw::{c_char, c_int};
+use tokio::time::{ sleep, Duration };
+use std::ffi::CString;
+use std::os::raw::{c_char, c_int, c_void};
+use std::pin::Pin;
+use std::sync::{ Arc, Mutex };
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 
@@ -177,18 +181,6 @@ pub unsafe extern "C" fn sandbox_api_stop(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sandbox_api_wait(
-    handle: ControllerHandle,
-    req: *const sandbox_types::SandboxWaitRequest,
-    rsp: *mut sandbox_types::SandboxWaitResponse,
-) -> c_int {
-    let controller_context = &mut *handle;
-    let r_req = ControllerWaitRequest::from(&*req);
-    println!("Sandbox API: Wait request: {:?}", r_req);
-    sandbox_api_execute!(controller_context, r_req, rsp, wait)
-}
-
-#[no_mangle]
 pub unsafe extern "C" fn sandbox_api_status(
     handle: ControllerHandle,
     req: *const sandbox_types::SandboxStatusRequest,
@@ -232,4 +224,101 @@ pub unsafe extern "C" fn sandbox_api_update(
     let r_req = ControllerUpdateRequest::from(&*req);
     println!("Sandbox API: Update request: {:?}", r_req);
     sandbox_api_execute!(controller_context, r_req, update)
+}
+
+pub type SandboxReadyCallback = extern "C" fn(*mut c_void);
+pub type SandboxPendingCallback = extern "C" fn(*mut c_void);
+pub type SandboxExitCallback = extern "C" fn(*mut c_void, *const sandbox_types::SandboxWaitResponse);
+
+#[repr(C)]
+pub struct SandboxWaitCallback {
+    pub ready: SandboxReadyCallback,
+    pub pending: SandboxPendingCallback,
+    pub exit: SandboxExitCallback,
+}
+
+macro_rules! callback_execute {
+    ($sandbox_id:ident, $callback:ident, $cb:ident, $ctx:ident, $rsp:expr) => {
+        match $ctx.lock().unwrap().as_mut() {
+            Some(ctx) => {
+                ($callback.$cb)(*ctx as *mut c_void, $rsp);
+            }
+            None => {
+                println!("Sandbox API: context is null, {:?}", $sandbox_id);
+                ($callback.$cb)(std::ptr::null_mut(), $rsp);
+            }
+        }
+    };
+    ($sandbox_id:ident, $callback:ident, $cb:ident, $ctx:ident) => {
+        match $ctx.lock().unwrap().as_mut()  {
+            Some(ctx) => {
+                ($callback.$cb)(*ctx as *mut c_void);
+            }
+            None => {
+                println!("Sandbox API: context is null, {:?}", $sandbox_id);
+                ($callback.exit)(std::ptr::null_mut(), std::ptr::null());
+            }
+        }
+    };
+}
+
+const RETRY_INTERVAL: u64 = 5;
+
+async fn do_wait(
+    mut client: client::Client,
+    sandbox_id: String,
+    req: ControllerWaitRequest,
+    callback: SandboxWaitCallback,
+    cb_ctx: Arc<Mutex<Option<&mut c_void>>>,
+    retry: bool,
+) {
+    let mut retry = retry;
+    // If this wait is for retry, set sandbox status back to ready if connection is alive
+    if retry && client.is_connection_alive().await {
+        callback_execute!(sandbox_id, callback, ready, cb_ctx);
+        retry = false;
+    }
+    match client.wait(req.clone()).await {
+        Ok(response) => {
+            let mut r_rsp = sandbox_types::SandboxWaitResponse::new();
+            r_rsp.from_controller(&response);
+            r_rsp.sandbox_id = CString::new(sandbox_id.as_str()).unwrap().into_raw();
+            println!("Sandbox API: Wait finished successful, {:?}", sandbox_id);
+            callback_execute!(sandbox_id, callback, exit, cb_ctx, &r_rsp);
+        }
+        Err(e) => {
+            println!("Sandbox API: Wait failed, {:?}, {:?}", sandbox_id, e);
+            if !client.is_connection_alive().await && !retry {
+                println!("Sandbox API: Connection is dead, {:?}", sandbox_id);
+                callback_execute!(sandbox_id, callback, pending, cb_ctx);
+            }
+            sleep(Duration::from_secs(RETRY_INTERVAL)).await;
+            let pinned_future: Pin<Box<_>> = Box::pin(do_wait(client.clone(), sandbox_id, req, callback, cb_ctx, true));
+            pinned_future.await;
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn sandbox_api_wait(
+    handle: ControllerHandle,
+    req: *const sandbox_types::SandboxWaitRequest,
+    callback: SandboxWaitCallback,
+    cb_ctx: *mut c_void,
+) -> c_int {
+    let controller_context = &mut *handle;
+    let r_req = ControllerWaitRequest::from(&*req);
+    println!("Sandbox API: Wait request: {:?}", r_req);
+    match controller_context.get_client() {
+        Some(client) => {
+            let sandbox_id = r_req.sandbox_id.clone();
+            let ctx: Arc<Mutex<Option<&mut c_void>>>= Arc::new(Mutex::new(cb_ctx.as_mut()));
+            RT.spawn(do_wait(client.clone(), sandbox_id, r_req, callback, ctx, false));
+            0
+        }
+        None => {
+            println!("Sandbox API: Failed to execute sandbox API, client is None");
+            -1
+        }
+    }
 }
