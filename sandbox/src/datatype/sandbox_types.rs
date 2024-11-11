@@ -11,10 +11,9 @@
 // See the Mulan PSL v2 for more details.
 
 
-use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
 use isula_common::isula_data_types::{Any, MapStringAny, MapStringString};
-use isula_common::isula_data_types::to_string;
+use isula_common::isula_data_types::{to_string, to_c_char_ptr};
 use isula_common::isula_data_types::{vec_to_c_char_ptr_ptr, c_char_ptr_ptr_to_vec};
 use isula_common::isula_data_types::double_ptr_to_vec;
 use isula_common::isula_data_types::u64_to_prost_timestamp;
@@ -47,9 +46,9 @@ impl From<&sandbox::Mount> for SandboxMount {
     fn from(mnt: &sandbox::Mount) -> Self {
         let (options, options_len) = vec_to_c_char_ptr_ptr(&mnt.options);
         let r_mnt = SandboxMount {
-            destination: CString::new(mnt.target.as_str()).unwrap().into_raw(),
-            type_: CString::new(mnt.r#type.as_str()).unwrap().into_raw(),
-            source: CString::new(mnt.source.as_str()).unwrap().into_raw(),
+            destination: to_c_char_ptr(mnt.target.as_str()),
+            type_: to_c_char_ptr(mnt.r#type.as_str()),
+            source: to_c_char_ptr(mnt.source.as_str()),
             options: options,
             options_len: options_len,
             residual: std::ptr::null(),
@@ -77,7 +76,7 @@ impl From<&SandboxSandboxRuntime> for sandbox::sandbox::Runtime {
 impl From<&sandbox::sandbox::Runtime> for SandboxSandboxRuntime {
     fn from(runtime: &sandbox::sandbox::Runtime) -> Self {
         let r_runtime = SandboxSandboxRuntime {
-            name: CString::new(runtime.name.as_str()).unwrap().into_raw(),
+            name: to_c_char_ptr(runtime.name.as_str()),
             options: runtime.options.as_ref()
                 .map(|prost_any| Box::into_raw(Box::new(Any::from(prost_any))) as *const Any)
                 .unwrap_or(std::ptr::null()),
@@ -122,7 +121,7 @@ impl From<&SandboxSandbox> for sandbox::Sandbox {
 impl From<&sandbox::Sandbox> for SandboxSandbox {
     fn from(sandbox: &sandbox::Sandbox) -> Self {
         let r_sandbox = SandboxSandbox {
-            sandbox_id: CString::new(sandbox.sandbox_id.as_str()).unwrap().into_raw(),
+            sandbox_id: to_c_char_ptr(sandbox.sandbox_id.as_str()),
             runtime: sandbox.runtime.as_ref()
                 .map(|rt| Box::into_raw(Box::new(SandboxSandboxRuntime::from(rt))) as *const SandboxSandboxRuntime)
                 .unwrap_or(std::ptr::null()),
@@ -137,7 +136,7 @@ impl From<&sandbox::Sandbox> for SandboxSandbox {
                 .map(|timestamp| prost_timestamp_to_u64(&timestamp))
                 .unwrap_or(0),
             extensions: Box::into_raw(Box::new(MapStringAny::from(&sandbox.extensions))),
-            sandboxer: CString::new(sandbox.sandboxer.as_str()).unwrap().into_raw(),
+            sandboxer: to_c_char_ptr(sandbox.sandboxer.as_str()),
             residual: std::ptr::null(),
         };
         r_sandbox
@@ -182,7 +181,7 @@ pub struct SandboxCreateResponse {
 
 impl SandboxCreateResponse {
     pub fn from_controller(&mut self, req: &sandbox_services::ControllerCreateResponse) {
-        self.sandbox_id = CString::new(req.sandbox_id.as_str()).unwrap().into_raw();
+        self.sandbox_id = to_c_char_ptr(req.sandbox_id.as_str());
     }
 }
 
@@ -215,13 +214,13 @@ pub struct SandboxStartResponse {
 
 impl SandboxStartResponse {
     pub fn from_controller(&mut self, req: &sandbox_services::ControllerStartResponse) {
-        self.sandbox_id = CString::new(req.sandbox_id.as_str()).unwrap().into_raw();
+        self.sandbox_id = to_c_char_ptr(req.sandbox_id.as_str());
         self.pid = req.pid;
         self.created_at = req.created_at.as_ref()
             .map(|timestamp| prost_timestamp_to_u64(&timestamp))
             .unwrap_or(0);
         self.labels = Box::into_raw(Box::new(MapStringString::from(&req.labels)));
-        self.address = CString::new(req.address.as_str()).unwrap().into_raw();
+        self.address = to_c_char_ptr(req.address.as_str());
         self.version = req.version;
     }
 }
@@ -253,9 +252,9 @@ pub struct SandboxPlatformResponse {
 impl SandboxPlatformResponse {
     pub fn from_controller(&mut self, rsp: &sandbox_services::ControllerPlatformResponse) {
         rsp.platform.as_ref().map(|platform| {
-            self.os = CString::new(platform.os.as_str()).unwrap().into_raw();
-            self.architecture = CString::new(platform.architecture.as_str()).unwrap().into_raw();
-            self.variant = CString::new(platform.variant.as_str()).unwrap().into_raw();
+            self.os = to_c_char_ptr(platform.os.as_str());
+            self.architecture = to_c_char_ptr(platform.architecture.as_str());
+            self.variant = to_c_char_ptr(platform.variant.as_str());
         });
     }
 }
@@ -354,9 +353,9 @@ pub struct SandboxStatusResponse {
 
 impl SandboxStatusResponse {
     pub fn from_controller(&mut self, rsp: &sandbox_services::ControllerStatusResponse) {
-        self.sandbox_id = CString::new(rsp.sandbox_id.as_str()).unwrap().into_raw();
+        self.sandbox_id = to_c_char_ptr(rsp.sandbox_id.as_str());
         self.pid = rsp.pid;
-        self.state = CString::new(rsp.state.as_str()).unwrap().into_raw();
+        self.state = to_c_char_ptr(rsp.state.as_str());
         self.info = Box::into_raw(Box::new(MapStringString::from(&rsp.info)));
         self.created_at = rsp.created_at.as_ref()
             .map(|timestamp| prost_timestamp_to_u64(&timestamp))
@@ -367,7 +366,7 @@ impl SandboxStatusResponse {
         self.extra = rsp.extra.as_ref()
             .map(|prost_any| {Box::into_raw(Box::new(Any::from(prost_any))) as *const Any})
             .unwrap_or(std::ptr::null());
-        self.address = CString::new(rsp.address.as_str()).unwrap().into_raw();
+        self.address = to_c_char_ptr(rsp.address.as_str());
         self.version = rsp.version;
     }
 }
@@ -421,7 +420,7 @@ impl SandboxMetricsResponse {
         self.timestamp = metrics.timestamp.as_ref()
             .map(|timestamp| prost_timestamp_to_u64(&timestamp))
             .unwrap_or(0);
-        self.id = CString::new(metrics.id.as_str()).unwrap().into_raw();
+        self.id = to_c_char_ptr(metrics.id.as_str());
         self.data = metrics.data.as_ref()
             .map(|prost_any| {Box::into_raw(Box::new(Any::from(prost_any))) as *const Any})
             .unwrap_or(std::ptr::null());

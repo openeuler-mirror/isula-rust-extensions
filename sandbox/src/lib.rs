@@ -16,14 +16,13 @@ mod datatype;
 use controller::client;
 use datatype::sandbox_types;
 use tokio::time::{ sleep, Duration };
-use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::{ Arc, Mutex };
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 use async_recursion::async_recursion;
 
-use isula_common::isula_data_types::to_string;
+use isula_common::isula_data_types::{ to_string, to_c_char_ptr };
 
 use controller::client::sandbox::containerd::services::sandbox::v1::ControllerCreateRequest;
 use controller::client::sandbox::containerd::services::sandbox::v1::ControllerStartRequest;
@@ -282,7 +281,7 @@ async fn do_wait(
         Ok(response) => {
             let mut r_rsp = sandbox_types::SandboxWaitResponse::new();
             r_rsp.from_controller(&response);
-            r_rsp.sandbox_id = CString::new(sandbox_id.as_str()).unwrap().into_raw();
+            r_rsp.sandbox_id = to_c_char_ptr(sandbox_id.as_str());
             println!("Sandbox API: Wait finished successful, {:?}", sandbox_id);
             callback_execute!(sandbox_id, callback, exit, cb_ctx, &r_rsp);
         }
