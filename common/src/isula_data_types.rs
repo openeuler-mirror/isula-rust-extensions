@@ -22,6 +22,13 @@ pub fn to_string(x: *const c_char) -> String {
         }
     }
 }
+
+pub fn to_c_char_ptr(x: &str) -> *const c_char {
+    CString::new(x)
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
 pub fn vec_to_double_ptr<T1, T2>(vec: &Vec<T1>) -> (*const *const T2, usize)
 where
     T2: for<'a> From<&'a T1>,
@@ -90,7 +97,7 @@ pub fn vec_to_c_char_ptr_ptr(vec: &Vec<String>) -> (*const *const c_char, usize)
 
     let mut c_char_ptr_vec = Vec::new();
     for item in vec.iter() {
-        c_char_ptr_vec.push(CString::new(item.as_str()).unwrap().into_raw());
+        c_char_ptr_vec.push(to_c_char_ptr(item.as_str()));
     }
     let c_char_ptr_vec = c_char_ptr_vec.into_boxed_slice();
     let c_char_ptr = Box::into_raw(c_char_ptr_vec) as *const *const c_char;
@@ -122,7 +129,7 @@ impl From<&Any> for prost_types::Any {
 
 impl From<&prost_types::Any> for Any {
     fn from(any: &prost_types::Any) -> Self {
-        let type_url = CString::new(any.type_url.as_str()).unwrap().into_raw();
+        let type_url = to_c_char_ptr(any.type_url.as_str());
         let len = any.value.len();
         let value = if len == 0 {
             std::ptr::null()
@@ -187,8 +194,8 @@ impl From <&std::collections::HashMap<String, String>> for MapStringString {
         let mut keys: Vec<*const c_char> = Vec::new();
         let mut values: Vec<*const c_char> = Vec::new();
         for (key, value) in x.iter() {
-            keys.push(CString::new(key.as_str()).unwrap().into_raw());
-            values.push(CString::new(value.as_str()).unwrap().into_raw());
+            keys.push(to_c_char_ptr(key.as_str()));
+            values.push(to_c_char_ptr(value.as_str()));
         }
         let len = keys.len();
         let keys = keys.into_boxed_slice();
@@ -265,7 +272,7 @@ impl From <&std::collections::HashMap<String, prost_types::Any>> for MapStringAn
         let mut keys: Vec<*const c_char> = Vec::new();
         let mut values: Vec<*const AnyElement> = Vec::new();
         for (key, value) in x.iter() {
-            keys.push(CString::new(key.as_str()).unwrap().into_raw());
+            keys.push(to_c_char_ptr(key.as_str()));
             let any_value = Box::into_raw(Box::new(Any::from(value)));
             let any_elemnt = Box::into_raw(Box::new(AnyElement {
                 element: any_value as *const Any,

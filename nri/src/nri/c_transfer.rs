@@ -17,7 +17,7 @@ use protobuf::{EnumOrUnknown, MessageField};
 
 use crate::protocols::nri::{self, OptionalBool, OptionalFileMode, OptionalInt, OptionalInt64, OptionalString, OptionalUInt32, OptionalUInt64};
 
-use isula_common::isula_data_types::to_string;
+use isula_common::isula_data_types::{to_c_char_ptr, to_string};
 use isula_common::isula_data_types::vec_to_double_ptr;
 use isula_common::isula_data_types::double_ptr_to_vec;
 use isula_common::isula_data_types::c_char_ptr_ptr_to_vec;
@@ -186,8 +186,8 @@ impl From<&nri::LinuxCPU> for NriLinuxCpu {
             period: req.period.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(x.value))),
             realtime_runtime: req.realtime_runtime.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(x.value))),
             realtime_period: req.realtime_period.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(x.value))),
-            cpus: CString::new(req.cpus.as_str()).unwrap().into_raw(),
-            mems: CString::new(req.mems.as_str()).unwrap().into_raw(),
+            cpus: to_c_char_ptr(req.cpus.as_str()),
+            mems: to_c_char_ptr(req.mems.as_str()),
             residual: std::ptr::null(),
         };
         r_req
@@ -239,7 +239,7 @@ impl From<&NriHugepageLimit> for nri::HugepageLimit {
 impl From<&nri::HugepageLimit> for NriHugepageLimit {
     fn from(req: &nri::HugepageLimit) -> Self {
         let r_req = NriHugepageLimit {
-            page_size: CString::new(req.page_size.as_str()).unwrap().into_raw(),
+            page_size: to_c_char_ptr(req.page_size.as_str()),
             limit: req.limit,
             residual: std::ptr::null(),
         };
@@ -289,10 +289,10 @@ impl From<&nri::LinuxDeviceCgroup> for NriLinuxDeviceCgroup {
     fn from(req: &nri::LinuxDeviceCgroup) -> Self {
         let r_req = NriLinuxDeviceCgroup {
             allow: req.allow as u8,
-            type_: CString::new(req.type_.as_str()).unwrap().into_raw(),
+            type_: to_c_char_ptr(req.type_.as_str()),
             major: req.major.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(x.value))),
             minor: req.minor.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(x.value))),
-            access: CString::new(req.access.as_str()).unwrap().into_raw(),
+            access: to_c_char_ptr(req.access.as_str()),
             residual: std::ptr::null(),
         };
         r_req
@@ -368,8 +368,8 @@ impl From<&nri::LinuxResources> for NriLinuxResources {
             cpu: req.cpu.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(NriLinuxCpu::from(x)))),
             hugepage_limits: hugepage_limits,
             hugepage_limits_len: hugepage_limits_len,
-            blockio_class: req.blockio_class.as_ref().map_or(std::ptr::null(), |x| CString::new(x.value.as_str()).unwrap().into_raw()),
-            rdt_class: req.rdt_class.as_ref().map_or(std::ptr::null(), |x| CString::new(x.value.as_str()).unwrap().into_raw()),
+            blockio_class: req.blockio_class.as_ref().map_or(std::ptr::null(), |x| to_c_char_ptr(x.value.as_str())),
+            rdt_class: req.rdt_class.as_ref().map_or(std::ptr::null(), |x| to_c_char_ptr(x.value.as_str())),
             unified: Box::into_raw(Box::new(MapStringString::from(&req.unified))),
             devices: devices,
             devices_len: devices_len,
@@ -527,9 +527,9 @@ impl From<&nri::Mount> for NriMount {
     fn from(req: &nri::Mount) -> Self {
         let (options, options_len) = vec_to_c_char_ptr_ptr(&req.options);
         let r_req = NriMount {
-            destination: CString::new(req.destination.as_str()).unwrap().into_raw(),
-            type_: CString::new(req.type_.as_str()).unwrap().into_raw(),
-            source: CString::new(req.source.as_str()).unwrap().into_raw(),
+            destination: to_c_char_ptr(req.destination.as_str()),
+            type_: to_c_char_ptr(req.type_.as_str()),
+            source: to_c_char_ptr(req.source.as_str()),
             options: options,
             options_len: options_len,
             residual: std::ptr::null(),
@@ -568,7 +568,7 @@ impl From<&nri::Hook> for NriHook {
         let (args, args_len) = vec_to_c_char_ptr_ptr(&req.args);
         let (env, env_len) = vec_to_c_char_ptr_ptr(&req.env);
         let r_req = NriHook {
-            path: CString::new(req.path.as_str()).unwrap().into_raw(),
+            path: to_c_char_ptr(req.path.as_str()),
             args: args,
             args_len: args_len,
             env: env,
@@ -658,7 +658,7 @@ impl From<&NriPosixRlimit> for nri::POSIXRlimit {
 impl From<&nri::POSIXRlimit> for NriPosixRlimit {
     fn from(req: &nri::POSIXRlimit) -> Self {
         let r_req = NriPosixRlimit {
-            type_: CString::new(req.type_.as_str()).unwrap().into_raw(),
+            type_: to_c_char_ptr(req.type_.as_str()),
             hard: req.hard,
             soft: req.soft,
             residual: std::ptr::null(),
@@ -794,7 +794,7 @@ pub struct NriContainerUpdate {
 impl From<&nri::ContainerUpdate> for NriContainerUpdate {
     fn from(req: &nri::ContainerUpdate) -> Self {
         let r_req = NriContainerUpdate {
-            container_id: CString::new(req.container_id.as_str()).unwrap().into_raw(),
+            container_id: to_c_char_ptr(req.container_id.as_str()),
             linux: req.linux.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(NriLinuxContainerUpdate::from(x)))),
             ignore_failure: req.ignore_failure as u8,
             residual: std::ptr::null(),
@@ -835,8 +835,8 @@ pub struct NriKeyValue {
 impl From<&nri::KeyValue> for NriKeyValue {
     fn from(req: &nri::KeyValue) -> Self {
         let r_req = NriKeyValue {
-            key: CString::new(req.key.as_str()).unwrap().into_raw(),
-            value: CString::new(req.value.as_str()).unwrap().into_raw(),
+            key: to_c_char_ptr(req.key.as_str()),
+            value: to_c_char_ptr(req.value.as_str()),
             residual: std::ptr::null(),
         };
         r_req
@@ -884,8 +884,8 @@ impl From<&NriLinuxDevice> for nri::LinuxDevice {
 impl From<&nri::LinuxDevice> for NriLinuxDevice {
     fn from(req: &nri::LinuxDevice) -> Self {
         let r_req = NriLinuxDevice {
-            path: CString::new(req.path.as_str()).unwrap().into_raw(),
-            type_: CString::new(req.type_.as_str()).unwrap().into_raw(),
+            path: to_c_char_ptr(req.path.as_str()),
+            type_: to_c_char_ptr(req.type_.as_str()),
             major: req.major,
             minor: req.minor,
             file_mode: req.file_mode.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(x.value))),
@@ -913,7 +913,7 @@ impl From<&nri::LinuxContainerAdjustment> for NriLinuxContainerAdjustment {
             devices: devices,
             devices_len: devices_len,
             resources: req.resources.as_ref().map_or(std::ptr::null(), |x| Box::into_raw(Box::new(NriLinuxResources::from(x)))),
-            cgroups_path: CString::new(req.cgroups_path.as_str()).unwrap().into_raw(),
+            cgroups_path: to_c_char_ptr(req.cgroups_path.as_str()),
             residual: std::ptr::null(),
         };
         r_req
@@ -965,8 +965,8 @@ pub struct NriContainerEviction {
 impl From<&nri::ContainerEviction> for NriContainerEviction {
     fn from(req: &nri::ContainerEviction) -> Self {
         let r_req = NriContainerEviction {
-            container_id: CString::new(req.container_id.as_str()).unwrap().into_raw(),
-            reason: CString::new(req.reason.as_str()).unwrap().into_raw(),
+            container_id: to_c_char_ptr(req.container_id.as_str()),
+            reason: to_c_char_ptr(req.reason.as_str()),
             residual: std::ptr::null(),
         };
         r_req
@@ -994,8 +994,8 @@ pub struct NriRegisterPluginRequest {
 impl From<&nri::RegisterPluginRequest> for NriRegisterPluginRequest {
     fn from(req: &nri::RegisterPluginRequest) -> Self {
         let r_req = NriRegisterPluginRequest {
-            plugin_name: CString::new(req.plugin_name.as_str()).unwrap().into_raw(),
-            plugin_idx: CString::new(req.plugin_idx.as_str()).unwrap().into_raw(),
+            plugin_name: to_c_char_ptr(req.plugin_name.as_str()),
+            plugin_idx: to_c_char_ptr(req.plugin_idx.as_str()),
             residual: std::ptr::null(),
         };
         r_req

@@ -62,7 +62,9 @@ impl nri_ttrpc::Runtime for NriRuntimeService {
         let callbacks = RUNTIME_CALLBACKS.read().
             map_err(|e| ttrpc::Error::Others(format!("lock error: {}", e)))?.clone();
         if let Some(register_plugin) = callbacks.register_plugin {
-            let c_plugin_id = std::ffi::CString::new(self.plugin_id.clone()).unwrap().into_raw();
+            let c_plugin_id = std::ffi::CString::new(self.plugin_id.clone())
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
             let c_req = Box::into_raw(Box::new(c_transfer::NriRegisterPluginRequest::from(&_req)));
             if register_plugin(c_plugin_id, c_req) != 0 {
                 return Err(ttrpc::Error::Others(format!("register plugin for {} failed", self.plugin_id)));
@@ -85,7 +87,9 @@ impl nri_ttrpc::Runtime for NriRuntimeService {
         let callbacks = RUNTIME_CALLBACKS.read().
             map_err(|e| ttrpc::Error::Others(format!("lock error: {}", e)))?.clone();
         if let Some(update_containers) = callbacks.update_containers {
-            let c_plugin_id = std::ffi::CString::new(self.plugin_id.clone()).unwrap().into_raw();
+            let c_plugin_id = std::ffi::CString::new(self.plugin_id.clone())
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
             let c_req = Box::into_raw(Box::new(c_transfer::NriUpdateContainersRequest::from(&_req)));
             let mut c_resp: *mut NriUpdateContainersResponse = std::ptr::null_mut();
             if update_containers(c_plugin_id, c_req, &mut c_resp) != 0 {
