@@ -1,0 +1,34 @@
+[package]
+name = "isula_sandbox"
+version = "0.1.0"
+authors = ["Huawei iSula Team"]
+edition = "2021"
+build = "build.rs"
+description = "Provide Sandbox API rust-extensions for iSulad, it is a dynamic library used by iSulad"
+license = "Mulan PSL v2"
+
+[dependencies]
+bytes = "1.6.1"
+libc = "0.2.79"
+byteorder = "1.3.2"
+log = "0.4.8"
+nix = "0.29.0"
+tonic = "0.7.2"
+prost = "0.10.4"
+prost-types = "0.10.1"
+lazy_static = "1.4.0"
+tokio = { version = "1.41.0", features = ["full"] }
+hyper = { version = "1" }
+hyper-util = { version = "0.1.4", features = ["full"] }
+http = { version = "1" }
+tower = { version = "0.5", features = ["full"] }
+isula_common = { path = "../common" }
+
+
+[build-dependencies]
+tonic-build = "0.7.2"
+cmd_lib = "1.9.4"
+
+[lib]
+name = "isula_sandbox"
+crate-type = ["dylib"]

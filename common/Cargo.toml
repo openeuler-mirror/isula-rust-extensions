@@ -5,3 +5,7 @@ authors = ["Huawei iSula Team"]
 edition = "2021"
 description = "provide common data structures for other crates"
 license = "Mulan PSL v2"
+
+[dependencies]
+prost = "0.10.4"
+prost-types = "0.10.1"
