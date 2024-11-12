@@ -18,10 +18,10 @@ use datatype::sandbox_types;
 use tokio::time::{ sleep, Duration };
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
-use std::pin::Pin;
 use std::sync::{ Arc, Mutex };
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
+use async_recursion::async_recursion;
 
 use isula_common::isula_data_types::to_string;
 
@@ -263,7 +263,7 @@ macro_rules! callback_execute {
 }
 
 const RETRY_INTERVAL: u64 = 5;
-
+#[async_recursion]
 async fn do_wait(
     mut client: client::Client,
     sandbox_id: String,
@@ -293,8 +293,7 @@ async fn do_wait(
                 callback_execute!(sandbox_id, callback, pending, cb_ctx);
             }
             sleep(Duration::from_secs(RETRY_INTERVAL)).await;
-            let pinned_future: Pin<Box<_>> = Box::pin(do_wait(client.clone(), sandbox_id, req, callback, cb_ctx, true));
-            pinned_future.await;
+            do_wait(client.clone(), sandbox_id, req, callback, cb_ctx, true).await;
         }
     }
 }

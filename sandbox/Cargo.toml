@@ -23,6 +23,7 @@ hyper-util = { version = "0.1.4", features = ["full"] }
 http = { version = "1" }
 tower = { version = "0.5", features = ["full"] }
 isula_common = { path = "../common" }
+async-recursion = "1.1.1"
 
 
 [build-dependencies]
