@@ -284,12 +284,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "isula_common"
+version = "0.1.0"
+
+[[package]]
 name = "isula_nri"
 version = "0.1.0"
 dependencies = [
  "byteorder",
  "bytes",
  "cmd_lib",
+ "isula_common",
  "lazy_static",
  "libc",
  "log",

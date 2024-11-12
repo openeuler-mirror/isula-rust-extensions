@@ -16,6 +16,7 @@ pub mod nri;
 
 use nri::{c_transfer, plugin};
 use std::os::raw::{c_char, c_int};
+use isula_common::isula_data_types::to_string;
 
 #[no_mangle]
 pub extern "C" fn nri_runtime_service_init(callbacks: c_transfer::NriRuntimeCallbacks) -> c_int {
@@ -43,7 +44,7 @@ pub extern "C" fn nri_plugin_connect(plugin_id: *const c_char, local_fd: c_int, 
     if plugin_id.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     println!("isula-rust-extensions::nri_plugin_connect with::{}", r_plugin_id);
     if let Err(e) = plugin::connect(&r_plugin_id, local_fd, timeout) {
         println!("isula-rust-extensions::nri_plugin_connect failed: {}", e);
@@ -59,7 +60,7 @@ pub extern "C" fn nri_plugin_disconnect(plugin_id: *const c_char) -> c_int {
     if plugin_id.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     println!("isula-rust-extensions::nri_plugin_disconnect with::{}", r_plugin_id);
 
     if let Err(e) = plugin::disconnect(&r_plugin_id) {
@@ -77,7 +78,7 @@ pub extern "C" fn nri_external_service_start(socket_addr: *const c_char,
     if socket_addr.is_null() {
         return -1;
     }
-    let r_socket_addr = c_transfer::to_string(socket_addr);
+    let r_socket_addr = to_string(socket_addr);
     println!("isula-rust-extensions::nri_external_service_start with::{}", r_socket_addr);
     if let Err(e) = plugin::external_service_start(&r_socket_addr, callback) {
         println!("isula-rust-extensions::nri_external_service_start failed: {}", e);
@@ -105,7 +106,7 @@ pub extern "C" fn nri_plugin_configure(plugin_id: *const c_char,
     if plugin_id.is_null() || req.is_null() || resp.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     let c_req = unsafe { req.as_ref() }.unwrap();
     let r_req: protocols::nri::ConfigureRequest = protocols::nri::ConfigureRequest::from(c_req);
     println!("isula-rust-extensions::nri_plugin_configure with::{}", r_plugin_id);
@@ -133,7 +134,7 @@ pub extern "C" fn nri_plugin_synchronize(plugin_id: *const c_char,
     if plugin_id.is_null() || req.is_null() || resp.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     let c_req = unsafe { req.as_ref() }.unwrap();
     let r_req: protocols::nri::SynchronizeRequest = protocols::nri::SynchronizeRequest::from(c_req);
     println!("isula-rust-extensions::nri_plugin_synchronize with::{}", r_plugin_id);
@@ -159,7 +160,7 @@ pub extern "C" fn nri_plugin_shutdown(plugin_id: *const c_char
     if plugin_id.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     println!("isula-rust-extensions::nri_plugin_shutdown with::{}", r_plugin_id);
 
     match plugin::shutdown(&r_plugin_id) {
@@ -180,7 +181,7 @@ pub extern  "C" fn nri_plugin_create_container(plugin_id: *const c_char,
     if plugin_id.is_null() || req.is_null() || resp.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     let c_req = unsafe { req.as_ref() }.unwrap();
     let r_req: protocols::nri::CreateContainerRequest = protocols::nri::CreateContainerRequest::from(c_req);
     println!("isula-rust-extensions::nri_plugin_create_container with::{}", r_plugin_id);
@@ -208,7 +209,7 @@ pub extern "C" fn nri_plugin_update_container(plugin_id: *const c_char,
     if plugin_id.is_null() || req.is_null() || resp.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     let c_req = unsafe { req.as_ref() }.unwrap();
     let r_req: protocols::nri::UpdateContainerRequest = protocols::nri::UpdateContainerRequest::from(c_req);
     println!("isula-rust-extensions::nri_plugin_update_container with::{}", r_plugin_id);
@@ -236,7 +237,7 @@ pub extern "C" fn nri_plugin_stop_container(plugin_id: *const c_char,
     if plugin_id.is_null() || req.is_null() || resp.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     let c_req = unsafe { req.as_ref() }.unwrap();
     let r_req: protocols::nri::StopContainerRequest = protocols::nri::StopContainerRequest::from(c_req);
     println!("isula-rust-extensions::nri_plugin_stop_container with::{}", r_plugin_id);
@@ -263,7 +264,7 @@ pub extern "C" fn nri_plugin_state_change(plugin_id: *const c_char,
     if plugin_id.is_null() || req.is_null() {
         return -1;
     }
-    let r_plugin_id = c_transfer::to_string(plugin_id);
+    let r_plugin_id = to_string(plugin_id);
     let c_req = unsafe { req.as_ref() }.unwrap();
     let r_req: protocols::nri::StateChangeEvent = protocols::nri::StateChangeEvent::from(c_req);
     println!("isula-rust-extensions::nri_plugin_state_change with::{}", r_plugin_id);
