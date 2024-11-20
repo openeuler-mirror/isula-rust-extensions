@@ -21,6 +21,8 @@ use std::sync::{ Arc, Mutex };
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 use async_recursion::async_recursion;
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::ffi::CStr;
 
 use isula_common::isula_data_types::{ to_string, to_c_char_ptr };
 
@@ -44,6 +46,7 @@ lazy_static! {
             std::process::exit(1);
         }
     };
+    static ref RETRY_WAIT_MUTEX: tokio::sync::Mutex<i32> = tokio::sync::Mutex::new(0);
 }
 
 #[repr(C)]
@@ -225,9 +228,9 @@ pub unsafe extern "C" fn sandbox_api_update(
     sandbox_api_execute!(controller_context, r_req, update)
 }
 
-pub type SandboxReadyCallback = extern "C" fn(*mut c_void);
-pub type SandboxPendingCallback = extern "C" fn(*mut c_void);
-pub type SandboxExitCallback = extern "C" fn(*mut c_void, *const sandbox_types::SandboxWaitResponse);
+pub type SandboxReadyCallback = extern "C" fn(*const u8);
+pub type SandboxPendingCallback = extern "C" fn(*const u8);
+pub type SandboxExitCallback = extern "C" fn(*const u8, *const sandbox_types::SandboxWaitResponse);
 
 #[repr(C)]
 pub struct SandboxWaitCallback {
@@ -237,63 +240,132 @@ pub struct SandboxWaitCallback {
 }
 
 macro_rules! callback_execute {
-    ($sandbox_id:ident, $callback:ident, $cb:ident, $ctx:ident, $rsp:expr) => {
-        match $ctx.lock().unwrap().as_mut() {
-            Some(ctx) => {
-                ($callback.$cb)(*ctx as *mut c_void, $rsp);
-            }
-            None => {
-                println!("Sandbox API: context is null, {:?}", $sandbox_id);
-                ($callback.$cb)(std::ptr::null_mut(), $rsp);
-            }
+    ($sandbox_id:ident, $callback:ident, $cb:ident, $rsp:expr) => {
+        let sandbox_id_ptr = to_c_char_ptr($sandbox_id.as_str());
+        ($callback.$cb)(sandbox_id_ptr, $rsp);
+        unsafe {
+            let _ = CStr::from_ptr(sandbox_id_ptr);
         }
     };
-    ($sandbox_id:ident, $callback:ident, $cb:ident, $ctx:ident) => {
-        match $ctx.lock().unwrap().as_mut()  {
-            Some(ctx) => {
-                ($callback.$cb)(*ctx as *mut c_void);
-            }
-            None => {
-                println!("Sandbox API: context is null, {:?}", $sandbox_id);
-                ($callback.exit)(std::ptr::null_mut(), std::ptr::null());
-            }
+    ($sandbox_id:ident, $callback:ident, $cb:ident) => {
+        let sandbox_id_ptr = to_c_char_ptr($sandbox_id.as_str());
+        ($callback.$cb)(sandbox_id_ptr);
+        unsafe {
+            let _ = CStr::from_ptr(sandbox_id_ptr);
         }
     };
 }
 
 const RETRY_INTERVAL: u64 = 5;
+
+pub async fn is_connection_alive(
+    client: &mut client::Client,
+    sandbox_id: &String,
+    sandboxer: &String
+) -> bool {
+    let mut r_req = ControllerPlatformRequest::default();
+    r_req.sandbox_id = sandbox_id.clone();
+    r_req.sandboxer = sandboxer.clone();
+    match (*client).platform(r_req).await {
+        Ok(_) => true,
+        Err(e) => {
+            println!("Sandbox API: Failed to connect to client, {:?}", sandbox_id);
+            false
+        }
+    }
+}
+
+fn do_failed_exit_wait (
+    exit_status: u32,
+    message: String,
+    sandbox_id: &String,
+    callback: &SandboxWaitCallback,
+){
+    println!("Sandbox API: {:?}", message);
+
+    let mut r_rsp = sandbox_types::SandboxWaitResponse::new();
+    r_rsp.exit_status = exit_status;
+    r_rsp.exited_at = SystemTime::now().duration_since(UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs() as u64;
+    r_rsp.sandbox_id = to_c_char_ptr(sandbox_id.as_str());
+    callback_execute!(sandbox_id, callback, exit, &r_rsp);
+    unsafe {
+        let _ = CStr::from_ptr(r_rsp.sandbox_id);
+    }
+}
+
 #[async_recursion]
 async fn do_wait(
     mut client: client::Client,
     sandbox_id: String,
     req: ControllerWaitRequest,
     callback: SandboxWaitCallback,
-    cb_ctx: Arc<Mutex<Option<&mut c_void>>>,
-    retry: bool,
 ) {
-    let mut retry = retry;
-    // If this wait is for retry, set sandbox status back to ready if connection is alive
-    if retry && client.is_connection_alive().await {
-        callback_execute!(sandbox_id, callback, ready, cb_ctx);
-        retry = false;
-    }
-    match client.wait(req.clone()).await {
+    let mut unavailable = false;
+
+    match client.clone().wait(req.clone()).await {
         Ok(response) => {
             let mut r_rsp = sandbox_types::SandboxWaitResponse::new();
             r_rsp.from_controller(&response);
             r_rsp.sandbox_id = to_c_char_ptr(sandbox_id.as_str());
             println!("Sandbox API: Wait finished successful, {:?}", sandbox_id);
-            callback_execute!(sandbox_id, callback, exit, cb_ctx, &r_rsp);
+            callback_execute!(sandbox_id, callback, exit, &r_rsp);
+            unsafe {
+                let _ = CStr::from_ptr(r_rsp.sandbox_id);
+            }
         }
         Err(e) => {
-            println!("Sandbox API: Wait failed, {:?}, {:?}", sandbox_id, e);
-            if !client.is_connection_alive().await && !retry {
-                println!("Sandbox API: Connection is dead, {:?}", sandbox_id);
-                callback_execute!(sandbox_id, callback, pending, cb_ctx);
+            let mut err_code = e.code();
+            if format!("{:?}", e).contains("BrokenPipe") {
+                err_code = tonic::Code::Unavailable;
             }
-            sleep(Duration::from_secs(RETRY_INTERVAL)).await;
-            do_wait(client.clone(), sandbox_id, req, callback, cb_ctx, true).await;
+            match err_code {
+                tonic::Code::Unavailable => {
+                    println!("Sandbox API: Connection is unavailable, {:?}", sandbox_id);
+                    callback_execute!(sandbox_id, callback, pending);
+                    unavailable = true;
+                }
+                tonic::Code::NotFound => {
+                    do_failed_exit_wait(e.code() as u32,
+                        format!("The sandbox is not found, {:?}", sandbox_id),
+                        &sandbox_id, &callback);
+                }
+                _ => {
+                    do_failed_exit_wait(e.code() as u32,
+                        format!("Connection failed, {:?}, {:?}", e, sandbox_id),
+                        &sandbox_id, &callback);
+                }
+            }
         }
+    }
+    if unavailable {
+        /* 
+         * There is at most one async do_wait function which can acquire the mutex lock
+         * and do the retry for connection, while other async do_wait functions will 
+         * wait for the mutex to be unlocked.
+        */
+        match RETRY_WAIT_MUTEX.try_lock() {
+            Ok(_) => {
+                loop {
+                    sleep(Duration::from_secs(RETRY_INTERVAL)).await;
+                    if is_connection_alive(&mut client, &req.sandbox_id, &req.sandboxer).await {
+                        break;
+                    }
+                }
+            }
+            Err(_) => {
+                /* 
+                 * Blocking other do_wait retries, and wait for the connection to be recovered.
+                 */
+                println!("Sandbox API: Wait block , {:?}", sandbox_id);
+                _ = RETRY_WAIT_MUTEX.lock().await;
+            }
+        }
+
+        println!("Sandbox API: Wait retry, {:?}", sandbox_id);
+        callback_execute!(sandbox_id, callback, ready);
+        do_wait(client, sandbox_id, req, callback).await;
     }
 }
 
@@ -302,7 +374,6 @@ pub unsafe extern "C" fn sandbox_api_wait(
     handle: ControllerHandle,
     req: *const sandbox_types::SandboxWaitRequest,
     callback: SandboxWaitCallback,
-    cb_ctx: *mut c_void,
 ) -> c_int {
     let controller_context = &mut *handle;
     let r_req = ControllerWaitRequest::from(&*req);
@@ -310,8 +381,7 @@ pub unsafe extern "C" fn sandbox_api_wait(
     match controller_context.get_client() {
         Some(client) => {
             let sandbox_id = r_req.sandbox_id.clone();
-            let ctx: Arc<Mutex<Option<&mut c_void>>>= Arc::new(Mutex::new(cb_ctx.as_mut()));
-            RT.spawn(do_wait(client.clone(), sandbox_id, r_req, callback, ctx, false));
+            RT.spawn(do_wait(client.clone(), sandbox_id, r_req, callback));
             0
         }
         None => {

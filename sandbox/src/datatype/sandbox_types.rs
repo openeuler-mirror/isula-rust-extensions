@@ -296,8 +296,8 @@ impl From<&SandboxWaitRequest> for sandbox_services::ControllerWaitRequest {
 #[repr(C)]
 pub struct SandboxWaitResponse {
     pub sandbox_id: *const c_char,
-    exit_status: u32,
-    exited_at: u64,
+    pub exit_status: u32,
+    pub exited_at: u64,
     residual: *const c_void,
 }
 

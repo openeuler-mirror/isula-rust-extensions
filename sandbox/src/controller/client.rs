@@ -131,8 +131,4 @@ impl Client {
         let response = self.client.update(request).await?;
         Ok(response.into_inner())
     }
-
-    pub async fn is_connection_alive(&mut self) -> bool {
-        self.channel.ready().await.is_ok()
-    }
 }

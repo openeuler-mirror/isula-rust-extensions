@@ -41,14 +41,14 @@ struct ControllerContext;
 typedef struct ControllerContext *ControllerHandle_t;
 
 typedef int (*sandbox_api_ready_callback)(
-    void *cb_context
+    const char *sandbox_id
 );
 typedef int (*sandbox_api_pending_callback)(
-    void *cb_context
+    const char *sandbox_id
 );
 typedef int (*sandbox_api_exit_callback)(
-    void *cb_context,
-    const sandbox_wait_response *request
+    const char *sandbox_id,
+    const sandbox_wait_response *response
 );
 
 typedef struct {
@@ -73,7 +73,7 @@ int sandbox_api_platform(ControllerHandle_t chandle, const sandbox_platform_requ
 
 int sandbox_api_stop(ControllerHandle_t chandle, const sandbox_stop_request *request);
 
-int sandbox_api_wait(ControllerHandle_t chandle, const sandbox_wait_request *request, sandbox_api_wait_callback callback, void *cb_context);
+int sandbox_api_wait(ControllerHandle_t chandle, const sandbox_wait_request *request, sandbox_api_wait_callback callback);
 
 int sandbox_api_status(ControllerHandle_t chandle, const sandbox_status_request *request, sandbox_status_response *response);
 
