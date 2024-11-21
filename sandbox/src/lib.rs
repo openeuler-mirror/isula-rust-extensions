@@ -16,8 +16,7 @@ mod datatype;
 use controller::client;
 use datatype::sandbox_types;
 use tokio::time::{ sleep, Duration };
-use std::os::raw::{c_char, c_int, c_void};
-use std::sync::{ Arc, Mutex };
+use std::os::raw::{c_char, c_int};
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 use async_recursion::async_recursion;
@@ -228,9 +227,9 @@ pub unsafe extern "C" fn sandbox_api_update(
     sandbox_api_execute!(controller_context, r_req, update)
 }
 
-pub type SandboxReadyCallback = extern "C" fn(*const u8);
-pub type SandboxPendingCallback = extern "C" fn(*const u8);
-pub type SandboxExitCallback = extern "C" fn(*const u8, *const sandbox_types::SandboxWaitResponse);
+pub type SandboxReadyCallback = extern "C" fn(*const c_char);
+pub type SandboxPendingCallback = extern "C" fn(*const c_char);
+pub type SandboxExitCallback = extern "C" fn(*const c_char, *const sandbox_types::SandboxWaitResponse);
 
 #[repr(C)]
 pub struct SandboxWaitCallback {
@@ -269,7 +268,7 @@ pub async fn is_connection_alive(
     match (*client).platform(r_req).await {
         Ok(_) => true,
         Err(e) => {
-            println!("Sandbox API: Failed to connect to client, {:?}", sandbox_id);
+            println!("Sandbox API: Failed to connect to client, {:?}, {:?}", sandbox_id, e);
             false
         }
     }
