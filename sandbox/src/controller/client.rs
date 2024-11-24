@@ -32,7 +32,6 @@ use sandbox::containerd::services::sandbox::v1::ControllerUpdateRequest;
 use sandbox::containerd::services::sandbox::v1::ControllerUpdateResponse;
 
 use tonic::transport::Channel;
-use tower::ServiceExt;
 #[derive(Debug, Clone)]
 pub struct Client {
     pub channel: Channel,
