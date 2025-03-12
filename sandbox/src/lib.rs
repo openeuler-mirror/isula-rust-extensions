@@ -22,6 +22,7 @@ use tokio::runtime::Runtime;
 use async_recursion::async_recursion;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::ffi::CStr;
+use std::sync::Mutex;
 
 use isula_common::isula_data_types::{ to_string, to_c_char_ptr };
 
@@ -45,6 +46,7 @@ lazy_static! {
             std::process::exit(1);
         }
     };
+    static ref RUNTIME_MUTEX: Mutex<i32> = Mutex::new(0);
     static ref RETRY_WAIT_MUTEX: tokio::sync::Mutex<i32> = tokio::sync::Mutex::new(0);
 }
 
@@ -60,6 +62,7 @@ pub type ControllerHandle = *mut ControllerContext;
 impl ControllerContext {
     pub fn get_client(&mut self) -> Option<&mut client::Client>{
         if self.client.is_none() {
+            let _rt_lock = RUNTIME_MUTEX.lock().unwrap();
             match RT.block_on(controller::client::Client::new(self.address.clone())) {
                 Ok(client) => {
                     self.client = Some(client);
@@ -78,6 +81,7 @@ macro_rules! sandbox_api_execute {
     ($context:ident, $request:ident, $rsp:ident, $method:ident) => {
         match $context.get_client() {
             Some(client) => {
+                let _rt_lock = RUNTIME_MUTEX.lock().unwrap();
                 match RT.block_on((*client).$method($request)) {
                     Ok(response) => {
                         (*$rsp).from_controller(&response);
@@ -98,6 +102,7 @@ macro_rules! sandbox_api_execute {
     ($context:ident, $request:ident, $method:ident) => {
         match $context.get_client() {
             Some(client) => {
+                let _rt_lock = RUNTIME_MUTEX.lock().unwrap();
                 match RT.block_on((*client).$method($request)) {
                     Ok(_) => 0,
                     Err(e) => {
@@ -380,6 +385,7 @@ pub unsafe extern "C" fn sandbox_api_wait(
     match controller_context.get_client() {
         Some(client) => {
             let sandbox_id = r_req.sandbox_id.clone();
+            let _rt_lock = RUNTIME_MUTEX.lock().unwrap();
             RT.spawn(do_wait(client.clone(), sandbox_id, r_req, callback));
             0
         }
