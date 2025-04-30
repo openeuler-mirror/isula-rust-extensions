@@ -24,6 +24,9 @@ pub fn to_string(x: *const c_char) -> String {
 }
 
 pub fn to_c_char_ptr(x: &str) -> *const c_char {
+    if x.len() == 0 {
+        return std::ptr::null();
+    }
     CString::new(x)
         .map(|s| s.into_raw())
         .unwrap_or(std::ptr::null_mut())
